@@ -72,39 +72,12 @@ Public and private routing is handled natively via a Next.js dynamic catch-all r
 
 `app/pub/[packageId]/[[...path]]/route.ts`
 
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
+The route enforces a two-tier access check for private packages:
 
-export async function GET(
-  request: NextRequest, 
-  { params }: { params: { packageId: string, path?: string[] } }
-) {
-  const { packageId, path } = params;
-  
-  // 1. Resolve package metadata from filesystem
-  const meta = await getPackageMeta(packageId); 
-  if (!meta) {
-    return new NextResponse("Package Not Found", { status: 404 });
-  }
-  
-  // 2. Enforce Privacy via Query Parameter Token
-  if (meta.visibility === 'private') {
-    const { searchParams } = new URL(request.url);
-    const providedToken = searchParams.get('token');
-    
-    if (!providedToken || providedToken !== meta.secure_token) {
-      return new NextResponse("Unauthorized: Invalid or missing token parameter.", { status: 401 });
-    }
-  }
+1. **Session cookie (`tp_pkg_session`)** — if the browser already holds a valid per-package session, access is granted immediately without re-presenting the token.
+2. **Query token (`?token=`)** — if no valid session is found, the token in the URL is validated against `meta.secure_token`. On success, a `tp_pkg_session` cookie is issued and the request proceeds, so the token is no longer needed for subsequent page loads within the session.
 
-  // 3. Resolve local file path safely (preventing directory traversal attacks)
-  const safePath = resolveSafeFilePath(packageId, path);
-  
-  // 4. Stream file from the .storage directory with appropriate Content-Type
-  return streamFileFromDisk(safePath);
-}
-
-```
+Bare package root requests (`/pub/<id>`) are redirected to `/pub/<id>/` to ensure relative asset paths resolve correctly.
 
 ---
 
@@ -123,7 +96,21 @@ STORAGE_DIR_PATH=/var/data/talonpress_storage
 # Security
 OPENTALON_SHARED_SECRET=your_high_entropy_mcp_token_here
 
+# Session & Auth
+AUTH_SESSION_TTL=3600          # MCP session cookie lifetime in seconds (default: 3600)
+PUBLIC_BASE_URL=https://your.domain.com  # Used to set the Secure flag on cookies over HTTPS
 ```
+
+### Authentication Behaviour
+
+When `OPENTALON_SHARED_SECRET` is set, TalonPress enforces HMAC-signed session cookies on all protected routes:
+
+| Cookie | Scope | Purpose |
+| --- | --- | --- |
+| `tp_session` | `/` | MCP API session. Issued by the login endpoint after the shared secret is verified. |
+| `tp_pkg_session` | `/pub` | Per-package access for private packages. Carries a map of `packageId → expiry` timestamps. |
+
+On the first visit to a private package URL with a valid `?token=` query parameter, TalonPress promotes the token to a `tp_pkg_session` cookie so subsequent requests in the same browser session no longer need to pass the token in the URL.
 
 ---
 
@@ -132,29 +119,24 @@ OPENTALON_SHARED_SECRET=your_high_entropy_mcp_token_here
 ### Prerequisites
 
 * Node.js v18.x or higher
-* npm / pnpm / yarn
+* pnpm (`npm install -g pnpm`)
 
 ### Installation
 
 1. Clone the repository into your OpenTalon ecosystem environment:
 ```bash
-git clone [https://github.com/your-repo/talonpress.git](https://github.com/your-repo/talonpress.git)
+git clone https://github.com/your-repo/talonpress.git
 cd talonpress
-
 ```
-
 
 2. Install dependencies:
 ```bash
-npm install
-
+pnpm install
 ```
-
 
 3. Run the development server:
 ```bash
-npm run dev
-
+pnpm dev
 ```
 
 
@@ -181,12 +163,65 @@ Add the TalonPress server configuration to your OpenTalon MCP settings file (e.g
 
 ---
 
+## 🐳 Docker Deployment
+
+A multi-stage `Dockerfile` is included. It installs dependencies, builds the Next.js standalone output, and produces a minimal production image.
+
+```bash
+# Build the image locally
+docker build -t talonpress .
+
+# Run with required environment variables
+docker run -p 3000:3000 \
+  -e OPENTALON_SHARED_SECRET=your_secret \
+  -e PUBLIC_BASE_URL=https://your.domain.com \
+  -v /var/data/talonpress_storage:/app/.storage \
+  talonpress
+```
+
+### build.sh
+
+`build.sh` automates tagging and pushing images to a registry using the current git commit:
+
+```bash
+# Tag as <branch>-<short-hash> and push
+./build.sh hash
+
+# Tag with a timestamp (manual builds)
+./build.sh ts
+```
+
+---
+
+## ☸️ Kubernetes Deployment
+
+Sample manifests are provided in the [`k8s/`](k8s/) directory and managed via Kustomize:
+
+| File | Purpose |
+| --- | --- |
+| `namespace.yaml` | Dedicated `talonpress` namespace |
+| `pvc.yaml` | PersistentVolumeClaim for `.storage` |
+| `deployment.yaml` | Two-replica deployment with liveness/readiness probes |
+| `service.yaml` | ClusterIP service on port 3000 |
+| `ingress.yaml` | Ingress rule (update host and TLS config for your cluster) |
+| `kustomization.yaml` | Kustomize entry point |
+
+Apply everything with:
+
+```bash
+kubectl apply -k k8s/
+```
+
+> [!NOTE]
+> The sample deployment uses `registry.kieffer.me/talonpress:latest`. Update the `image:` field in `k8s/deployment.yaml` and add your registry credentials (`imagePullSecrets`) before deploying to your own cluster. Environment variables (`OPENTALON_SHARED_SECRET`, `PUBLIC_BASE_URL`) should be injected via a Kubernetes Secret rather than hardcoded in the manifest.
+
+---
+
 ## 🔒 Security Considerations
 
 > [!WARNING]
-> * **Token Leakage:** Passing security tokens via query parameters (`?token=...`) makes distribution simple for agents, but means tokens can appear in browser histories or server access logs. Ensure your environment logs strip query strings for private package endpoints.
+> * **Token Leakage:** Passing security tokens via query parameters (`?token=...`) makes distribution simple for agents, but means tokens can appear in browser histories or server access logs. TalonPress mitigates this by promoting a valid token to an `HttpOnly` session cookie on first use, but ensure your environment strips query strings from access logs for private package endpoints.
+> * **Session Secret:** All session and package cookies are HMAC-signed with `OPENTALON_SHARED_SECRET`. Rotate this secret to immediately invalidate all active sessions. Set `PUBLIC_BASE_URL` to an `https://` URL in production so the `Secure` cookie flag is applied.
 > * **Sandboxing:** Because this application serves arbitrary HTML/JS provided by autonomous agents, ensure that the serving domain is isolated or sandboxed (e.g., utilizing unique subdomains or rigid Content Security Policies) to prevent Cross-Site Scripting (XSS) risks to the parent OpenTalon management console.
-> 
-> 
 
 ```
