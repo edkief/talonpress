@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: talonpress
+  namespace: talonpress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - talonpress.kieffer.me
+      secretName: talonpress-tls
+  rules:
+    - host: talonpress.kieffer.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: talonpress
+                port:
+                  name: http

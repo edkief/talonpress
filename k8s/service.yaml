@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: talonpress
+  namespace: talonpress
+  labels:
+    app: talonpress
+spec:
+  selector:
+    app: talonpress
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+  type: ClusterIP

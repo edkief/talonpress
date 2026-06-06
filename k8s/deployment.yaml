@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talonpress
+  namespace: talonpress
+  labels:
+    app: talonpress
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: talonpress
+  template:
+    metadata:
+      labels:
+        app: talonpress
+    spec:
+      containers:
+        - name: talonpress
+          image: registry.kieffer.me/talonpress:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: STORAGE_DIR_PATH
+              value: /app/.storage
+          volumeMounts:
+            - name: storage
+              mountPath: /app/.storage
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: talonpress-storage
