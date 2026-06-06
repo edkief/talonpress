@@ -12,7 +12,7 @@ const mcpHandler = createMcpHandler(
     },
   },
   {
-    basePath: '/api',
+    basePath: '/api',   
     verboseLogs: process.env.NODE_ENV === 'development',
   },
 )

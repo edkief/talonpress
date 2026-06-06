@@ -3,7 +3,7 @@ import fs from 'fs'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { resolveSafeFilePath } from '@/lib/storage/paths'
 import { getContentType } from '@/lib/security'
-import { verifySession } from '@/lib/auth/session'
+import { verifySession, verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
 import { config } from '@/lib/config'
 
 export async function GET(
@@ -17,21 +17,39 @@ export async function GET(
     return new NextResponse('Package Not Found', { status: 404 })
   }
 
+  let pkgSessionCookie: string | undefined
+
   if (meta.visibility === 'private') {
     const { searchParams } = new URL(request.url)
     const queryToken = searchParams.get('token')
+    const cookieHeader = request.headers.get('cookie')
 
-    // Accept query token or a valid session
-    const hasValidToken = queryToken && queryToken === meta.secure_token
-    const hasValidSession = verifySession(request.headers.get('cookie'))
+    const hasValidToken = !!(queryToken && queryToken === meta.secure_token)
+    const hasValidSession = verifySession(cookieHeader)
+    const hasPackageSession = verifyPackageSession(cookieHeader, packageId)
 
-    if (!hasValidToken && !hasValidSession) {
+    if (!hasValidToken && !hasValidSession && !hasPackageSession) {
       if (config.authEnabled) {
         const returnUrl = encodeURIComponent(request.url)
         return NextResponse.redirect(new URL(`/auth?return=${returnUrl}`, request.url))
       }
       return new NextResponse('Unauthorized: Invalid or missing token parameter.', { status: 401 })
     }
+
+    // Promote a valid query token to a session cookie so assets load without the token
+    if (hasValidToken) {
+      pkgSessionCookie = grantPackageSession(cookieHeader, packageId)
+    }
+  }
+
+  // Redirect bare package root to trailing-slash so relative asset URLs resolve correctly.
+  // resolveSafeFilePath returns index.html for empty segments, so stat.isDirectory() would
+  // never trigger for this case — handle it explicitly before path resolution.
+  const url = new URL(request.url)
+  if (pathSegments.length === 0 && !url.pathname.endsWith('/')) {
+    const redirect = NextResponse.redirect(new URL(url.pathname + '/', request.url))
+    if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
+    return redirect
   }
 
   const safePath = resolveSafeFilePath(packageId, pathSegments)
@@ -49,7 +67,7 @@ export async function GET(
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return streamFile(indexPath, stat)
+        return withCookie(streamFile(indexPath, stat), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -58,18 +76,31 @@ export async function GET(
   }
 
   if (stat.isDirectory()) {
+    // Redirect to trailing-slash URL so relative asset paths (img src, scripts) resolve correctly
+    const url = new URL(request.url)
+    if (!url.pathname.endsWith('/')) {
+      const redirect = NextResponse.redirect(new URL(url.pathname + '/', request.url))
+      if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
+      return redirect
+    }
+
     const indexPath = resolveSafeFilePath(packageId, [...pathSegments, 'index.html'])
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return streamFile(indexPath, idxStat)
+        return withCookie(streamFile(indexPath, idxStat), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return streamFile(safePath, stat)
+  return withCookie(streamFile(safePath, stat), pkgSessionCookie)
+}
+
+function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
+  if (cookie) response.headers.append('Set-Cookie', cookie)
+  return response
 }
 
 function streamFile(filePath: string, stat: fs.Stats): NextResponse {
