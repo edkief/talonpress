@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+
+# Next.js build output (rebuilt inside Docker)
+.next
+
+# Local storage (mounted as a volume in production)
+.storage
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Dev / test artifacts
+coverage
+tests
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+build.sh
+
+# Kubernetes
+k8s
+
+# Misc
+*.md
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*

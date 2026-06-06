@@ -3,6 +3,13 @@ import { setupServer } from '@/lib/mcp/server'
 import { config } from '@/lib/config'
 import { timingSafeCompare } from '@/lib/auth/secret'
 
+if (!config.authEnabled) {
+  console.warn(
+    '[talonpress] WARNING: OPENTALON_SHARED_SECRET is not set. ' +
+    'The MCP API is open to unauthenticated requests.',
+  )
+}
+
 const mcpHandler = createMcpHandler(
   (server) => setupServer(server),
   {
@@ -13,7 +20,7 @@ const mcpHandler = createMcpHandler(
   },
   {
     basePath: '/api',   
-    verboseLogs: process.env.NODE_ENV === 'development',
+    verboseLogs: process.env.NODE_ENV === 'development' || process.env.MCP_VERBOSE_LOGS === 'true',
   },
 )
 

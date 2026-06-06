@@ -355,6 +355,24 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-size: 0.875rem;
 }
 
+/* ─── Banners ───────────────────────────────────────────────────────── */
+.az-banner {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+.az-banner--warning {
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: var(--amber-400);
+}
+.az-banner__icon { flex-shrink: 0; margin-top: 0.125rem; }
+.az-banner__title { font-weight: 600; margin-bottom: 0.125rem; }
+.az-banner__body { color: var(--fg2); }
+
 /* ─── Misc utilities ────────────────────────────────────────────────── */
 .az-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .az-text-sm { font-size: 0.875rem; }

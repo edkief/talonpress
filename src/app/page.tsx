@@ -55,6 +55,22 @@ export default async function DashboardPage() {
         </header>
 
         <div className="az-content">
+          {!config.authEnabled && (
+            <div className="az-banner az-banner--warning">
+              <svg className="az-banner__icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1.5L14.5 13.5H1.5L8 1.5Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+                <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+                <circle cx="8" cy="11.5" r="0.75" fill="currentColor" />
+              </svg>
+              <div>
+                <div className="az-banner__title">Authentication disabled</div>
+                <div className="az-banner__body">
+                  <code>OPENTALON_SHARED_SECRET</code> is not set. The MCP API and dashboard are open to unauthenticated requests. Set the variable and restart the server to enable access control.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="az-stats-grid">
             <div className="az-stat">
