@@ -19,7 +19,12 @@ const mcpHandler = createMcpHandler(
     },
   },
   {
-    basePath: '/api',   
+    basePath: '/api',
+    // We only support the stateless streamable HTTP transport (/api/mcp).
+    // The legacy SSE transport (/api/sse) requires a Redis backend for session
+    // coordination; without REDIS_URL/KV_URL it throws "redisUrl is required"
+    // as an unhandledRejection whenever a client hits /api/sse.
+    disableSse: true,
     verboseLogs: process.env.NODE_ENV === 'development' || process.env.MCP_VERBOSE_LOGS === 'true',
   },
 )
