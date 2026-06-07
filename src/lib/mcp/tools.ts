@@ -24,7 +24,13 @@ export function registerTools(server: McpServer): void {
       name: z.string().min(1).describe('Display name for the package'),
       visibility: z.enum(['public', 'private']).describe('Access visibility'),
       files: z
-        .array(z.object({ path: z.string(), content: z.string() }))
+        .array(
+          z.object({
+            path: z.string(),
+            content: z.string(),
+            encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
+          }),
+        )
         .min(1)
         .describe('Array of files to publish'),
     },
@@ -161,7 +167,13 @@ export function registerTools(server: McpServer): void {
     {
       package_id: z.string().min(1).describe('Package ID'),
       files: z
-        .array(z.object({ path: z.string(), content: z.string() }))
+        .array(
+          z.object({
+            path: z.string(),
+            content: z.string(),
+            encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
+          }),
+        )
         .min(1)
         .describe('Files to overwrite/add'),
     },

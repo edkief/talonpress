@@ -23,7 +23,7 @@ function computeHash(files: FileInput[]): string {
   const hash = crypto.createHash('sha256')
   for (const f of sorted) {
     hash.update(f.path)
-    hash.update(f.content)
+    hash.update(f.encoding === 'base64' ? Buffer.from(f.content, 'base64') : f.content)
   }
   return hash.digest('hex')
 }
@@ -32,7 +32,11 @@ async function writeFiles(baseDir: string, files: FileInput[]): Promise<void> {
   for (const file of files) {
     const filePath = path.join(baseDir, file.path)
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.promises.writeFile(filePath, file.content, 'utf8')
+    if (file.encoding === 'base64') {
+      await fs.promises.writeFile(filePath, Buffer.from(file.content, 'base64'))
+    } else {
+      await fs.promises.writeFile(filePath, file.content, 'utf8')
+    }
   }
 }
 

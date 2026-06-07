@@ -1,6 +1,7 @@
 export interface FileInput {
   path: string
   content: string
+  encoding?: 'utf8' | 'base64'
 }
 
 export type Visibility = 'public' | 'private'
