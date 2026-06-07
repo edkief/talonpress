@@ -219,9 +219,11 @@ export async function updatePackage(
 
   await fs.promises.writeFile(path.join(tmp, 'meta.json'), JSON.stringify(updated, null, 2), 'utf8')
 
-  // Atomically swap: rename existing to a tmp-old location, then new into place
+  // Atomically swap: rename existing to a tmp-old location, then new into place.
+  // Remove any stale .__old dir left by a previous crashed update first.
   const oldDir = deploymentDir(id)
   const tmpOld = `${oldDir}.__old`
+  await fs.promises.rm(tmpOld, { recursive: true, force: true })
   await fs.promises.rename(oldDir, tmpOld)
   await fs.promises.rename(tmp, oldDir)
   await fs.promises.rm(tmpOld, { recursive: true, force: true })
