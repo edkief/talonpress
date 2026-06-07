@@ -47,7 +47,7 @@ export async function GET(
   // never trigger for this case — handle it explicitly before path resolution.
   const url = new URL(request.url)
   if (pathSegments.length === 0 && !url.pathname.endsWith('/')) {
-    const redirect = NextResponse.redirect(new URL(url.pathname + '/', request.url))
+    const redirect = NextResponse.redirect(new URL(url.pathname + '/', config.publicBaseUrl))
     if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
     return redirect
   }
@@ -79,7 +79,7 @@ export async function GET(
     // Redirect to trailing-slash URL so relative asset paths (img src, scripts) resolve correctly
     const url = new URL(request.url)
     if (!url.pathname.endsWith('/')) {
-      const redirect = NextResponse.redirect(new URL(url.pathname + '/', request.url))
+      const redirect = NextResponse.redirect(new URL(url.pathname + '/', config.publicBaseUrl))
       if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
       return redirect
     }
