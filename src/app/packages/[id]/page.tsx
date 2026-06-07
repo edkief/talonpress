@@ -60,6 +60,12 @@ export default async function PackageDetailPage({
             </span>
           )}
           <div style={{ display: 'flex', gap: '0.375rem', marginLeft: 'auto' }}>
+            <a
+              href={`/api/packages/${meta.id}/download`}
+              className="az-btn az-btn--ghost az-btn--sm"
+            >
+              Download
+            </a>
             <PackageActions
               id={meta.id}
               name={meta.name}

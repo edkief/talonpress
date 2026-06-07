@@ -96,6 +96,12 @@ export default async function PackagesPage() {
                             >
                               View
                             </a>
+                            <a
+                              href={`/api/packages/${pkg.id}/download`}
+                              className="az-btn az-btn--ghost az-btn--sm"
+                            >
+                              Download
+                            </a>
                             <PackageActions
                               id={pkg.id}
                               name={pkg.name}
