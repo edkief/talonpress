@@ -25,7 +25,7 @@ export async function GET(
     const cookieHeader = request.headers.get('cookie')
 
     const hasValidToken = !!(queryToken && queryToken === meta.secure_token)
-    const hasValidSession = verifySession(cookieHeader)
+    const hasValidSession = config.authEnabled && verifySession(cookieHeader)
     const hasPackageSession = verifyPackageSession(cookieHeader, packageId)
 
     if (!hasValidToken && !hasValidSession && !hasPackageSession) {
