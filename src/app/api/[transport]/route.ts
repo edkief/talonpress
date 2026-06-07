@@ -5,7 +5,7 @@ import { timingSafeCompare } from '@/lib/auth/secret'
 
 if (!config.authEnabled) {
   console.warn(
-    '[talonpress] WARNING: OPENTALON_SHARED_SECRET is not set. ' +
+    '[talonpress] WARNING: TALONPRESS_SHARED_SECRET is not set. ' +
     'The MCP API is open to unauthenticated requests.',
   )
 }

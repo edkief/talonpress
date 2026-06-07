@@ -94,7 +94,7 @@ HOST=localhost
 STORAGE_DIR_PATH=/var/data/talonpress_storage
 
 # Security
-OPENTALON_SHARED_SECRET=your_high_entropy_mcp_token_here
+TALONPRESS_SHARED_SECRET=your_high_entropy_mcp_token_here
 
 # Session & Auth
 AUTH_SESSION_TTL=3600          # MCP session cookie lifetime in seconds (default: 3600)
@@ -103,7 +103,7 @@ PUBLIC_BASE_URL=https://your.domain.com  # Used to set the Secure flag on cookie
 
 ### Authentication Behaviour
 
-When `OPENTALON_SHARED_SECRET` is set, TalonPress enforces HMAC-signed session cookies on all protected routes:
+When `TALONPRESS_SHARED_SECRET` is set, TalonPress enforces HMAC-signed session cookies on all protected routes:
 
 | Cookie | Scope | Purpose |
 | --- | --- | --- |
@@ -152,7 +152,7 @@ Add the TalonPress server configuration to your OpenTalon MCP settings file (e.g
       "command": "node",
       "args": [".next/standalone/server.js"],
       "env": {
-        "OPENTALON_SHARED_SECRET": "your_high_entropy_mcp_token_here",
+        "TALONPRESS_SHARED_SECRET": "your_high_entropy_mcp_token_here",
         "STORAGE_DIR_PATH": "./.storage"
       }
     }
@@ -173,7 +173,7 @@ docker build -t talonpress .
 
 # Run with required environment variables
 docker run -p 3000:3000 \
-  -e OPENTALON_SHARED_SECRET=your_secret \
+  -e TALONPRESS_SHARED_SECRET=your_secret \
   -e PUBLIC_BASE_URL=https://your.domain.com \
   -v /var/data/talonpress_storage:/app/.storage \
   talonpress
@@ -213,7 +213,7 @@ kubectl apply -k k8s/
 ```
 
 > [!NOTE]
-> The sample deployment uses `registry.kieffer.me/talonpress:latest`. Update the `image:` field in `k8s/deployment.yaml` and add your registry credentials (`imagePullSecrets`) before deploying to your own cluster. Environment variables (`OPENTALON_SHARED_SECRET`, `PUBLIC_BASE_URL`) should be injected via a Kubernetes Secret rather than hardcoded in the manifest.
+> The sample deployment uses `registry.kieffer.me/talonpress:latest`. Update the `image:` field in `k8s/deployment.yaml` and add your registry credentials (`imagePullSecrets`) before deploying to your own cluster. Environment variables (`TALONPRESS_SHARED_SECRET`, `PUBLIC_BASE_URL`) should be injected via a Kubernetes Secret rather than hardcoded in the manifest.
 
 ---
 
@@ -221,7 +221,7 @@ kubectl apply -k k8s/
 
 > [!WARNING]
 > * **Token Leakage:** Passing security tokens via query parameters (`?token=...`) makes distribution simple for agents, but means tokens can appear in browser histories or server access logs. TalonPress mitigates this by promoting a valid token to an `HttpOnly` session cookie on first use, but ensure your environment strips query strings from access logs for private package endpoints.
-> * **Session Secret:** All session and package cookies are HMAC-signed with `OPENTALON_SHARED_SECRET`. Rotate this secret to immediately invalidate all active sessions. Set `PUBLIC_BASE_URL` to an `https://` URL in production so the `Secure` cookie flag is applied.
+> * **Session Secret:** All session and package cookies are HMAC-signed with `TALONPRESS_SHARED_SECRET`. Rotate this secret to immediately invalidate all active sessions. Set `PUBLIC_BASE_URL` to an `https://` URL in production so the `Secure` cookie flag is applied.
 > * **Sandboxing:** Because this application serves arbitrary HTML/JS provided by autonomous agents, ensure that the serving domain is isolated or sandboxed (e.g., utilizing unique subdomains or rigid Content Security Policies) to prevent Cross-Site Scripting (XSS) risks to the parent OpenTalon management console.
 
 ```

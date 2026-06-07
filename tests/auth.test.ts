@@ -3,14 +3,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 describe('auth/session', () => {
   beforeEach(() => {
     vi.resetModules()
-    process.env.OPENTALON_SHARED_SECRET = 'test-secret-abc'
+    process.env.TALONPRESS_SHARED_SECRET = 'test-secret-abc'
     process.env.AUTH_SESSION_TTL = '3600'
     process.env.PUBLIC_BASE_URL = 'http://localhost:3000'
   })
 
   afterEach(() => {
     vi.resetModules()
-    delete process.env.OPENTALON_SHARED_SECRET
+    delete process.env.TALONPRESS_SHARED_SECRET
     delete process.env.AUTH_SESSION_TTL
     delete process.env.PUBLIC_BASE_URL
   })
@@ -45,7 +45,7 @@ describe('auth/session', () => {
   })
 
   it('allows all requests when auth is disabled', async () => {
-    delete process.env.OPENTALON_SHARED_SECRET
+    delete process.env.TALONPRESS_SHARED_SECRET
     const { verifySession } = await import('../src/lib/auth/session')
     expect(verifySession(null)).toBe(true)
   })

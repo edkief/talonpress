@@ -65,7 +65,7 @@ export default async function DashboardPage() {
               <div>
                 <div className="az-banner__title">Authentication disabled</div>
                 <div className="az-banner__body">
-                  <code>OPENTALON_SHARED_SECRET</code> is not set. The MCP API and dashboard are open to unauthenticated requests. Set the variable and restart the server to enable access control.
+                  <code>TALONPRESS_SHARED_SECRET</code> is not set. The MCP API and dashboard are open to unauthenticated requests. Set the variable and restart the server to enable access control.
                 </div>
               </div>
             </div>
