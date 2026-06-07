@@ -16,6 +16,9 @@ export async function GET(
   if (!meta) {
     return new NextResponse('Package Not Found', { status: 404 })
   }
+  if (meta.disabled) {
+    return new NextResponse('Package Temporarily Unavailable', { status: 503 })
+  }
 
   let pkgSessionCookie: string | undefined
 

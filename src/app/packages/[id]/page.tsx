@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import { PackageActions } from '@/components/PackageActions'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { config } from '@/lib/config'
 
@@ -53,6 +54,19 @@ export default async function PackageDetailPage({
           <span className={`az-badge az-badge--${meta.visibility}`} style={{ marginLeft: '0.5rem' }}>
             {meta.visibility}
           </span>
+          {meta.disabled && (
+            <span className="az-badge az-badge--disabled" style={{ marginLeft: '0.25rem' }}>
+              disabled
+            </span>
+          )}
+          <div style={{ display: 'flex', gap: '0.375rem', marginLeft: 'auto' }}>
+            <PackageActions
+              id={meta.id}
+              name={meta.name}
+              fileCount={meta.files.length}
+              disabled={meta.disabled}
+            />
+          </div>
         </header>
 
         <div className="az-content" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -70,6 +84,11 @@ export default async function PackageDetailPage({
                 <Row label="Visibility">
                   <span className={`az-badge az-badge--${meta.visibility}`}>{meta.visibility}</span>
                 </Row>
+                {meta.disabled && (
+                  <Row label="Status">
+                    <span className="az-badge az-badge--disabled">disabled — users see 503</span>
+                  </Row>
+                )}
                 <Row label="Access URL">
                   <a
                     href={accessUrl}

@@ -237,6 +237,28 @@ export async function updatePackage(
   return updated
 }
 
+export async function disablePackage(id: string): Promise<PackageMeta> {
+  const meta = await getPackageMeta(id)
+  if (!meta) throw new Error(`Package not found: ${id}`)
+
+  const now = new Date().toISOString()
+  const updated: PackageMeta = { ...meta, disabled: true, updatedAt: now }
+  await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
+  await appendRegistryEvent({ ts: now, event: 'disable', id })
+  return updated
+}
+
+export async function enablePackage(id: string): Promise<PackageMeta> {
+  const meta = await getPackageMeta(id)
+  if (!meta) throw new Error(`Package not found: ${id}`)
+
+  const now = new Date().toISOString()
+  const updated: PackageMeta = { ...meta, disabled: false, updatedAt: now }
+  await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
+  await appendRegistryEvent({ ts: now, event: 'enable', id })
+  return updated
+}
+
 export async function deletePackage(id: string): Promise<void> {
   const meta = await getPackageMeta(id)
   if (!meta) throw new Error(`Package not found: ${id}`)

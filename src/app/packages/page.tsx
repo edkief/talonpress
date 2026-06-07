@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import { PackageActions } from '@/components/PackageActions'
 import { listPackages } from '@/lib/storage/deployments'
 import { config } from '@/lib/config'
 
@@ -21,7 +22,10 @@ function IconLock({ size = 14 }: { size?: number }) {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 export const dynamic = 'force-dynamic'
@@ -61,9 +65,14 @@ export default async function PackagesPage() {
                     {packages.map(pkg => (
                       <tr key={pkg.id}>
                         <td style={{ fontWeight: 500 }}>
-                          <Link href={`/packages/${pkg.id}`} style={{ color: 'var(--indigo-400)' }}>
-                            {pkg.name}
-                          </Link>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Link href={`/packages/${pkg.id}`} style={{ color: 'var(--indigo-400)' }}>
+                              {pkg.name}
+                            </Link>
+                            {pkg.disabled && (
+                              <span className="az-badge az-badge--disabled">disabled</span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <span className={`az-badge az-badge--${pkg.visibility}`}>
@@ -78,14 +87,22 @@ export default async function PackagesPage() {
                         <td className="az-text-muted az-text-sm">{formatDate(pkg.createdAt)}</td>
                         <td className="az-text-muted az-text-sm">{formatDate(pkg.updatedAt)}</td>
                         <td>
-                          <a
-                            href={`${config.publicBaseUrl}/pub/${pkg.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="az-btn az-btn--ghost az-btn--sm"
-                          >
-                            View
-                          </a>
+                          <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                            <a
+                              href={`${config.publicBaseUrl}/pub/${pkg.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="az-btn az-btn--ghost az-btn--sm"
+                            >
+                              View
+                            </a>
+                            <PackageActions
+                              id={pkg.id}
+                              name={pkg.name}
+                              fileCount={pkg.files.length}
+                              disabled={pkg.disabled}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -17,9 +17,10 @@ export interface PackageMeta {
   createdAt: string
   updatedAt: string
   deleted: boolean
+  disabled?: boolean
 }
 
-export type RegistryEventType = 'publish' | 'update' | 'visibility' | 'delete'
+export type RegistryEventType = 'publish' | 'update' | 'visibility' | 'delete' | 'disable' | 'enable'
 
 export interface RegistryEvent {
   ts: string

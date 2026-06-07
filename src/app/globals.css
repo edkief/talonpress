@@ -265,6 +265,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .az-badge--public { background: rgba(16,185,129,0.15); color: var(--emerald-400); }
 .az-badge--private { background: rgba(245,158,11,0.15); color: var(--amber-400); }
 .az-badge--deleted { background: rgba(239,68,68,0.15); color: var(--red-400); }
+.az-badge--disabled { background: rgba(107,114,128,0.2); color: var(--gray-400); }
 
 /* ─── Buttons ───────────────────────────────────────────────────────── */
 .az-btn {
@@ -288,7 +289,34 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   border: 1px solid var(--border);
 }
 .az-btn--ghost:hover { background: var(--az-hover); color: var(--fg1); }
+.az-btn--danger {
+  background: rgba(239,68,68,0.12);
+  color: var(--red-400);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.az-btn--danger:hover { background: rgba(239,68,68,0.22); }
 .az-btn--full { width: 100%; }
+
+/* ─── Modal ─────────────────────────────────────────────────────────── */
+.az-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.az-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  max-width: 28rem;
+  width: 100%;
+  box-shadow: var(--shadow-md);
+}
+.az-modal-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; }
+.az-modal-body { color: var(--fg2); font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem; }
+.az-modal-actions { display: flex; gap: 0.625rem; justify-content: flex-end; }
 
 /* ─── Inputs ────────────────────────────────────────────────────────── */
 .az-input-wrap { position: relative; }
