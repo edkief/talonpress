@@ -56,7 +56,7 @@ export default async function DashboardPage() {
         </header>
 
         <div className="az-content">
-          {!config.authEnabled && (
+          {!config.authEnabled && !config.disableAuthWarning && (
             <div className="az-banner az-banner--warning">
               <svg className="az-banner__icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1.5L14.5 13.5H1.5L8 1.5Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />

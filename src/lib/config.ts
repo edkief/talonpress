@@ -27,6 +27,7 @@ export const config = {
   })(),
   authSessionTtl: envInt('AUTH_SESSION_TTL', 3600),
   publicBaseUrl: env('PUBLIC_BASE_URL', 'http://localhost:3000'),
+  disableAuthWarning: env('TALONPRESS_DISABLE_AUTH_WARNING') === 'true',
   get authEnabled(): boolean {
     return this.sharedSecret.length > 0
   },
