@@ -4,6 +4,8 @@ node_modules/
 # Next.js
 .next/
 out/
+.env*
+!.env.local.example
 
 # Storage (runtime data — not committed)
 .storage/
