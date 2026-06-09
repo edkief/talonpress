@@ -1,5 +1,8 @@
 # Dependencies
 node_modules
+packages/client/node_modules
+packages/client/src
+packages/client/dist
 
 # Next.js build output (rebuilt inside Docker)
 .next

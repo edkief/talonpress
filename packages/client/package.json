@@ -1,0 +1,35 @@
+{
+  "name": "@talonpress/mcp-tools",
+  "version": "0.1.0",
+  "description": "Vercel AI SDK tool definitions for the TalonPress MCP API",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "ai": ">=4.0.0",
+    "zod": ">=4.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "ai": "^6.0.104",
+    "typescript": "^5.0.0",
+    "zod": "^4.3.6"
+  }
+}

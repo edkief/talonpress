@@ -3,6 +3,7 @@ FROM node:24-alpine AS base
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/client/package.json ./packages/client/package.json
 RUN npm i pnpm -g
 RUN pnpm install --frozen-lockfile
 
