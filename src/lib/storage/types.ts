@@ -12,6 +12,7 @@ export interface PackageMeta {
   slug: string
   visibility: Visibility
   secure_token?: string
+  defaultPage?: string
   hash: string
   files: string[]
   createdAt: string

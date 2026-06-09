@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
+import path from 'path'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { resolveSafeFilePath } from '@/lib/storage/paths'
 import { getContentType } from '@/lib/security'
 import { verifySession, verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
 import { config } from '@/lib/config'
+import { renderMarkdown } from '@/lib/markdown'
 
 export async function GET(
   request: NextRequest,
@@ -45,8 +47,10 @@ export async function GET(
     }
   }
 
+  const defaultPage = meta.defaultPage ?? 'index.html'
+
   // Redirect bare package root to trailing-slash so relative asset URLs resolve correctly.
-  // resolveSafeFilePath returns index.html for empty segments, so stat.isDirectory() would
+  // resolveSafeFilePath returns the default page for empty segments, so stat.isDirectory() would
   // never trigger for this case — handle it explicitly before path resolution.
   const url = new URL(request.url)
   if (pathSegments.length === 0 && !url.pathname.endsWith('/')) {
@@ -55,7 +59,7 @@ export async function GET(
     return redirect
   }
 
-  const safePath = resolveSafeFilePath(packageId, pathSegments)
+  const safePath = resolveSafeFilePath(packageId, pathSegments, defaultPage)
   if (!safePath) {
     return new NextResponse('Forbidden', { status: 403 })
   }
@@ -65,12 +69,12 @@ export async function GET(
   try {
     stat = await fs.promises.stat(safePath)
   } catch {
-    // Try appending index.html for directory-like requests
-    const indexPath = resolveSafeFilePath(packageId, [...pathSegments, 'index.html'])
+    // Try appending the default page for directory-like requests
+    const indexPath = resolveSafeFilePath(packageId, [...pathSegments, defaultPage])
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return withCookie(streamFile(indexPath, stat), pkgSessionCookie)
+        return withCookie(await serveFile(request, indexPath, stat), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -87,23 +91,51 @@ export async function GET(
       return redirect
     }
 
-    const indexPath = resolveSafeFilePath(packageId, [...pathSegments, 'index.html'])
+    const indexPath = resolveSafeFilePath(packageId, [...pathSegments, defaultPage])
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return withCookie(streamFile(indexPath, idxStat), pkgSessionCookie)
+        return withCookie(await serveFile(request, indexPath, idxStat), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return withCookie(streamFile(safePath, stat), pkgSessionCookie)
+  return withCookie(await serveFile(request, safePath, stat), pkgSessionCookie)
 }
 
 function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
   if (cookie) response.headers.append('Set-Cookie', cookie)
   return response
+}
+
+async function serveFile(request: NextRequest, filePath: string, stat: fs.Stats): Promise<NextResponse> {
+  const ext = path.extname(filePath).slice(1).toLowerCase()
+
+  if (ext === 'md') {
+    const wantRaw = new URL(request.url).searchParams.has('raw')
+    const source = await fs.promises.readFile(filePath, 'utf8')
+    if (wantRaw) {
+      return new NextResponse(source, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'public, max-age=0, must-revalidate',
+        },
+      })
+    }
+    const title = path.basename(filePath, '.md')
+    return new NextResponse(renderMarkdown(source, title), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+      },
+    })
+  }
+
+  return streamFile(filePath, stat)
 }
 
 function streamFile(filePath: string, stat: fs.Stats): NextResponse {

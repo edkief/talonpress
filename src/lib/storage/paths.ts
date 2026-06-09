@@ -51,11 +51,13 @@ export function generateId(name: string): string {
  * Resolves a requested file path safely within a package's dist directory.
  * Returns null if the path would escape the dist directory.
  */
-export function resolveSafeFilePath(packageId: string, segments: string[]): string | null {
+export function resolveSafeFilePath(
+  packageId: string,
+  segments: string[],
+  defaultPage = 'index.html',
+): string | null {
   const base = distDir(packageId)
-  const requested = segments.length === 0
-    ? 'index.html'
-    : segments.join('/')
+  const requested = segments.length === 0 ? defaultPage : segments.join('/')
 
   const resolved = path.resolve(base, requested)
 

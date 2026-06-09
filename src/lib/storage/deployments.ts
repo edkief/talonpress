@@ -85,6 +85,7 @@ export async function publishPackage(
   name: string,
   visibility: Visibility,
   files: FileInput[],
+  defaultPage?: string,
 ): Promise<PackageMeta> {
   await ensureDirs()
 
@@ -100,6 +101,7 @@ export async function publishPackage(
     slug,
     visibility,
     ...(secure_token ? { secure_token } : {}),
+    ...(defaultPage ? { defaultPage } : {}),
     hash,
     files: files.map(f => f.path),
     createdAt: now,
@@ -197,6 +199,7 @@ export async function updateVisibility(
 export async function updatePackage(
   id: string,
   files: FileInput[],
+  defaultPage?: string,
 ): Promise<PackageMeta> {
   const meta = await getPackageMeta(id)
   if (!meta) throw new Error(`Package not found: ${id}`)
@@ -216,6 +219,7 @@ export async function updatePackage(
 
   const updated: PackageMeta = {
     ...meta,
+    ...(defaultPage !== undefined ? { defaultPage } : {}),
     hash,
     files: allFiles,
     updatedAt: now,

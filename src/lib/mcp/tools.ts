@@ -33,9 +33,10 @@ export function registerTools(server: McpServer): void {
         )
         .min(1)
         .describe('Array of files to publish'),
+      default_page: z.string().optional().describe('Entry-point file served at the package root (default: index.html)'),
     },
-    async ({ name, visibility, files }) => {
-      const meta = await publishPackage(name, visibility, files)
+    async ({ name, visibility, files, default_page }) => {
+      const meta = await publishPackage(name, visibility, files, default_page)
       const url = packageUrl(meta.id, meta.secure_token)
       return {
         content: [
@@ -46,6 +47,7 @@ export function registerTools(server: McpServer): void {
               url,
               visibility: meta.visibility,
               ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
+              ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
               hash: meta.hash,
               createdAt: meta.createdAt,
             }),
@@ -78,6 +80,7 @@ export function registerTools(server: McpServer): void {
         name: meta.name,
         visibility: meta.visibility,
         url: packageUrl(meta.id, meta.secure_token),
+        ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
         hash: meta.hash,
         files: meta.files,
         createdAt: meta.createdAt,
@@ -113,9 +116,10 @@ export function registerTools(server: McpServer): void {
               name: meta.name,
               visibility: meta.visibility,
               url: packageUrl(meta.id, meta.secure_token),
+              ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
+              ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
               hash: meta.hash,
               files: meta.files,
-              ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
               createdAt: meta.createdAt,
               updatedAt: meta.updatedAt,
             }),
@@ -176,11 +180,12 @@ export function registerTools(server: McpServer): void {
         )
         .min(1)
         .describe('Files to overwrite/add'),
+      default_page: z.string().optional().describe('Change the entry-point file served at the package root'),
     },
-    async ({ package_id, files }) => {
+    async ({ package_id, files, default_page }) => {
       let meta
       try {
-        meta = await updatePackage(package_id, files)
+        meta = await updatePackage(package_id, files, default_page)
       } catch (err) {
         return {
           content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }],
@@ -195,6 +200,7 @@ export function registerTools(server: McpServer): void {
               id: meta.id,
               hash: meta.hash,
               files: meta.files,
+              ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
               updatedAt: meta.updatedAt,
             }),
           },
