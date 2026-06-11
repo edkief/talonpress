@@ -17,23 +17,25 @@ function packageUrl(id: string, token?: string): string {
 
 export function registerTools(server: McpServer): void {
   // publish_package
-  server.tool(
+  server.registerTool(
     'publish_package',
-    'Compiles and publishes a new static web package. Returns the deployment ID, access URL, and secure_token if private.',
     {
-      name: z.string().min(1).describe('Display name for the package'),
-      visibility: z.enum(['public', 'private']).describe('Access visibility'),
-      files: z
-        .array(
-          z.object({
-            path: z.string(),
-            content: z.string(),
-            encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
-          }),
-        )
-        .min(1)
-        .describe('Array of files to publish'),
-      default_page: z.string().optional().describe('Entry-point file served at the package root (default: index.html)'),
+      description: 'Compiles and publishes a new static web package. Returns the deployment ID, access URL, and secure_token if private.',
+      inputSchema: {
+        name: z.string().min(1).describe('Display name for the package'),
+        visibility: z.enum(['public', 'private']).describe('Access visibility'),
+        files: z
+          .array(
+            z.object({
+              path: z.string(),
+              content: z.string(),
+              encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
+            }),
+          )
+          .min(1)
+          .describe('Array of files to publish'),
+        default_page: z.string().optional().describe('Entry-point file served at the package root (default: index.html)'),
+      },
     },
     async ({ name, visibility, files, default_page }) => {
       const meta = await publishPackage(name, visibility, files, default_page)
@@ -58,20 +60,22 @@ export function registerTools(server: McpServer): void {
   )
 
   // list_packages
-  server.tool(
+  server.registerTool(
     'list_packages',
-    'Returns an array of available packages with their visibility status and access URLs.',
     {
-      visibility: z
-        .enum(['public', 'private'])
-        .optional()
-        .describe('Filter by visibility'),
-      limit: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe('Maximum number of results'),
+      description: 'Returns an array of available packages with their visibility status and access URLs.',
+      inputSchema: {
+        visibility: z
+          .enum(['public', 'private'])
+          .optional()
+          .describe('Filter by visibility'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Maximum number of results'),
+      },
     },
     async ({ visibility, limit }) => {
       const packages = await listPackages(visibility, limit)
@@ -93,11 +97,13 @@ export function registerTools(server: McpServer): void {
   )
 
   // get_package_status
-  server.tool(
+  server.registerTool(
     'get_package_status',
-    'Fetches the live status, route configuration, file manifest, and active tokens for a specific package.',
     {
-      package_id: z.string().min(1).describe('Package ID'),
+      description: 'Fetches the live status, route configuration, file manifest, and active tokens for a specific package.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+      },
     },
     async ({ package_id }) => {
       const meta = await getPackageMeta(package_id)
@@ -130,12 +136,14 @@ export function registerTools(server: McpServer): void {
   )
 
   // update_visibility
-  server.tool(
+  server.registerTool(
     'update_visibility',
-    "Modifies access permissions. Transitioning to 'private' automatically generates a new secure token.",
     {
-      package_id: z.string().min(1).describe('Package ID'),
-      visibility: z.enum(['public', 'private']).describe('New visibility'),
+      description: "Modifies access permissions. Transitioning to 'private' automatically generates a new secure token.",
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+        visibility: z.enum(['public', 'private']).describe('New visibility'),
+      },
     },
     async ({ package_id, visibility }) => {
       let meta
@@ -165,22 +173,24 @@ export function registerTools(server: McpServer): void {
   )
 
   // update_package
-  server.tool(
+  server.registerTool(
     'update_package',
-    'Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched.',
     {
-      package_id: z.string().min(1).describe('Package ID'),
-      files: z
-        .array(
-          z.object({
-            path: z.string(),
-            content: z.string(),
-            encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
-          }),
-        )
-        .min(1)
-        .describe('Files to overwrite/add'),
-      default_page: z.string().optional().describe('Change the entry-point file served at the package root'),
+      description: 'Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+        files: z
+          .array(
+            z.object({
+              path: z.string(),
+              content: z.string(),
+              encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
+            }),
+          )
+          .min(1)
+          .describe('Files to overwrite/add'),
+        default_page: z.string().optional().describe('Change the entry-point file served at the package root'),
+      },
     },
     async ({ package_id, files, default_page }) => {
       let meta
@@ -210,11 +220,13 @@ export function registerTools(server: McpServer): void {
   )
 
   // delete_package
-  server.tool(
+  server.registerTool(
     'delete_package',
-    'Purges the deployment directory and marks the package as deleted in the registry log.',
     {
-      package_id: z.string().min(1).describe('Package ID'),
+      description: 'Purges the deployment directory and marks the package as deleted in the registry log.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+      },
     },
     async ({ package_id }) => {
       try {
