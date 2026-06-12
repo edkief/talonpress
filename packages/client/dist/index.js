@@ -195,7 +195,7 @@ export function getTalonpressTools(cfg, workspaceDir) {
                         result = await callTalonpress(cfg, 'update_package', {
                             package_id: input.package_id,
                             files,
-                            ...(input.default_page ? { default_page: input.default_page } : {}),
+                            default_page: input.default_page,
                         });
                     }
                     else {
