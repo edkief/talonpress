@@ -1,5 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { z } from 'zod'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { listPackages, getPackageMeta } from '../storage/deployments'
 import { config } from '../config'
 
@@ -10,7 +9,7 @@ function packageUrl(id: string, token?: string): string {
 
 export function registerResources(server: McpServer): void {
   // packages://list
-  server.resource(
+  server.registerResource(
     'packages-list',
     'packages://list',
     { description: 'Dynamically updated JSON list of all active packages' },
@@ -39,20 +38,12 @@ export function registerResources(server: McpServer): void {
   )
 
   // packages://{package_id}/meta
-  server.resource(
+  server.registerResource(
     'package-meta',
-    new URL('packages://{package_id}/meta').toString(),
-    {
-      description: 'Raw meta.json configuration for an individual package',
-    },
-    async (uri) => {
-      // Extract package_id from uri like packages://my-package/meta
-      const match = uri.href.match(/^packages:\/\/([^/]+)\/meta$/)
-      if (!match) {
-        throw new Error(`Invalid resource URI: ${uri.href}`)
-      }
-      const package_id = match[1]
-      const meta = await getPackageMeta(package_id)
+    new ResourceTemplate('packages://{package_id}/meta', { list: undefined }),
+    { description: 'Raw meta.json configuration for an individual package' },
+    async (uri, { package_id }) => {
+      const meta = await getPackageMeta(package_id as string)
       if (!meta) {
         throw new Error(`Package not found: ${package_id}`)
       }

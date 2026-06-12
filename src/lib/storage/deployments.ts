@@ -89,6 +89,15 @@ export async function publishPackage(
 ): Promise<PackageMeta> {
   await ensureDirs()
 
+  const filePaths = files.map(f => f.path)
+  const effectivePage = defaultPage ?? (files.length === 1 ? files[0].path : undefined)
+  if (!effectivePage) {
+    throw new Error('defaultPage is required when publishing multiple files')
+  }
+  if (!filePaths.includes(effectivePage)) {
+    throw new Error(`defaultPage "${effectivePage}" does not exist in the package files`)
+  }
+
   const id = generateId(name)
   const slug = id
   const hash = computeHash(files)
@@ -101,9 +110,9 @@ export async function publishPackage(
     slug,
     visibility,
     ...(secure_token ? { secure_token } : {}),
-    ...(defaultPage ? { defaultPage } : {}),
+    defaultPage: effectivePage,
     hash,
-    files: files.map(f => f.path),
+    files: filePaths,
     createdAt: now,
     updatedAt: now,
     deleted: false,
@@ -217,6 +226,10 @@ export async function updatePackage(
   const allFiles = await listFilesRecursive(tmpDist)
   const hash = computeHash(allFiles.map(f => ({ path: f, content: '' })))
 
+  if (defaultPage !== undefined && !allFiles.includes(defaultPage)) {
+    throw new Error(`defaultPage "${defaultPage}" does not exist in the package files`)
+  }
+
   const updated: PackageMeta = {
     ...meta,
     ...(defaultPage !== undefined ? { defaultPage } : {}),
@@ -244,6 +257,11 @@ export async function updatePackage(
 export async function updateDefaultPage(id: string, defaultPage: string): Promise<PackageMeta> {
   const meta = await getPackageMeta(id)
   if (!meta) throw new Error(`Package not found: ${id}`)
+
+  const existingFiles = await listFilesRecursive(distDir(id))
+  if (!existingFiles.includes(defaultPage)) {
+    throw new Error(`defaultPage "${defaultPage}" does not exist in the package files`)
+  }
 
   const now = new Date().toISOString()
   const updated: PackageMeta = { ...meta, defaultPage, updatedAt: now }

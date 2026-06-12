@@ -27,7 +27,7 @@ describe('storage/deployments', () => {
     const meta = await publishPackage('Test Site', 'public', [
       { path: 'index.html', content: '<h1>Hello</h1>' },
       { path: 'styles.css', content: 'body { color: red; }' },
-    ])
+    ], 'index.html')
 
     expect(meta.name).toBe('Test Site')
     expect(meta.visibility).toBe('public')
@@ -58,7 +58,7 @@ describe('storage/deployments', () => {
     const meta = await publishPackage('My App', 'public', [
       { path: 'index.html', content: '<h1>v1</h1>' },
       { path: 'style.css', content: 'body{}' },
-    ])
+    ], 'index.html')
 
     await updatePackage(meta.id, [
       { path: 'index.html', content: '<h1>v2</h1>' },
@@ -140,9 +140,9 @@ describe('storage/deployments', () => {
   it('list_packages filters by visibility', async () => {
     const { publishPackage, listPackages } = await import('../src/lib/storage/deployments')
 
-    await publishPackage('Pub One', 'public', [{ path: 'i.html', content: '' }])
-    await publishPackage('Priv One', 'private', [{ path: 'i.html', content: '' }])
-    await publishPackage('Pub Two', 'public', [{ path: 'i.html', content: '' }])
+    await publishPackage('Pub One', 'public', [{ path: 'i.html', content: '' }], 'i.html')
+    await publishPackage('Priv One', 'private', [{ path: 'i.html', content: '' }], 'i.html')
+    await publishPackage('Pub Two', 'public', [{ path: 'i.html', content: '' }], 'i.html')
 
     const all = await listPackages()
     expect(all).toHaveLength(3)
@@ -157,9 +157,9 @@ describe('storage/deployments', () => {
   it('list_packages respects limit', async () => {
     const { publishPackage, listPackages } = await import('../src/lib/storage/deployments')
 
-    await publishPackage('A', 'public', [{ path: 'i.html', content: '' }])
-    await publishPackage('B', 'public', [{ path: 'i.html', content: '' }])
-    await publishPackage('C', 'public', [{ path: 'i.html', content: '' }])
+    await publishPackage('A', 'public', [{ path: 'i.html', content: '' }], 'i.html')
+    await publishPackage('B', 'public', [{ path: 'i.html', content: '' }], 'i.html')
+    await publishPackage('C', 'public', [{ path: 'i.html', content: '' }], 'i.html')
 
     const limited = await listPackages(undefined, 2)
     expect(limited).toHaveLength(2)
