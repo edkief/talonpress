@@ -48,11 +48,11 @@ Agents can execute actions using these schema-defined tools:
 
 | Tool Name | Parameters | Description |
 | --- | --- | --- |
-| `publish_package` | `name` (string)<br>`visibility` (`"public"` &#124; `"private"`)<br>`files` (array of `{ path: string, content: string }`) | Compiles and publishes a new web package. Returns the deployment ID, base access URL, and a `secure_token` if private. |
+| `publish_package` | `name` (string)<br>`visibility` (`"public"` &#124; `"private"`)<br>`files` (array of `{ path: string, content: string, encoding?: "utf8" \| "base64" }`)<br>`default_page` (string) | Compiles and publishes a new web package. Returns the deployment ID, base access URL, and a `secure_token` if private. `default_page` must be a path present in `files`. |
 | `list_packages` | `visibility` (optional string)<br>`limit` (optional integer) | Returns an array of available packages, their visibility status, and access URLs. |
 | `get_package_status` | `package_id` (string) | Fetches the live status, route configuration, file manifest, and active tokens for a specific package. |
 | `update_visibility` | `package_id` (string)<br>`visibility` (`"public"` &#124; `"private"`) | Modifies access permissions. Transitioning to `private` automatically generates a new secure token. |
-| `update_package` | `package_id` (string)<br>`files` (array of `{ path: string, content: string }`) | Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched, and updates the `updatedAt` timestamp and build hash. |
+| `update_package` | `package_id` (string)<br>`files` (array of `{ path: string, content: string, encoding?: "utf8" \| "base64" }`)<br>`default_page` (optional string) | Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched, and updates the `updatedAt` timestamp and build hash. If `default_page` is provided it must exist in the resulting merged file set. |
 | `delete_package` | `package_id` (string) | Purges the deployment directory and marks the package as deleted in the registry log. |
 
 ### 📂 Resources
@@ -97,8 +97,11 @@ STORAGE_DIR_PATH=/var/data/talonpress_storage
 TALONPRESS_SHARED_SECRET=your_high_entropy_mcp_token_here
 
 # Session & Auth
-AUTH_SESSION_TTL=3600          # MCP session cookie lifetime in seconds (default: 3600)
-PUBLIC_BASE_URL=https://your.domain.com  # Used to set the Secure flag on cookies over HTTPS
+AUTH_SESSION_TTL=3600          # Dashboard auth session cookie lifetime in seconds (default: 3600)
+PUBLIC_BASE_URL=https://your.domain.com  # Used to construct package URLs and set the Secure cookie flag
+
+# Suppress the startup warning when TALONPRESS_SHARED_SECRET is not set
+TALONPRESS_DISABLE_AUTH_WARNING=true
 ```
 
 ### Authentication Behaviour
@@ -143,23 +146,62 @@ pnpm dev
 
 ### Connecting to OpenTalon
 
-Add the TalonPress server configuration to your OpenTalon MCP settings file (e.g., `mcp-config.json`):
+TalonPress exposes a **Streamable HTTP** MCP endpoint at `/api/mcp`. Point your MCP client at the running server's URL. With authentication enabled, pass the shared secret as a Bearer token:
 
 ```json
 {
   "mcpServers": {
     "talonpress": {
-      "command": "node",
-      "args": [".next/standalone/server.js"],
-      "env": {
-        "TALONPRESS_SHARED_SECRET": "your_high_entropy_mcp_token_here",
-        "STORAGE_DIR_PATH": "./.storage"
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer your_high_entropy_mcp_token_here"
       }
     }
   }
 }
-
 ```
+
+> [!NOTE]
+> SSE transport (`/api/sse`) is disabled. Only the stateless Streamable HTTP transport is supported.
+
+---
+
+## 📦 Client Package: `@talonpress/mcp-tools`
+
+`packages/client` ships a **Vercel AI SDK** `ToolSet` that wraps the TalonPress MCP API for use inside AI agents built with the `ai` package.
+
+### Installation
+
+```bash
+pnpm add @talonpress/mcp-tools
+```
+
+Peer dependencies: `ai >= 4.0.0`, `zod >= 4.0.0`.
+
+### Usage
+
+```ts
+import { getTalonpressTools } from '@talonpress/mcp-tools';
+
+const tools = getTalonpressTools({
+  url: 'http://localhost:3000/api/mcp',
+  headers: { Authorization: 'Bearer your_secret' },
+});
+
+// Pass `tools` to any Vercel AI SDK `generateText` / `streamText` call.
+```
+
+### Available Tools
+
+| Tool | Description |
+| --- | --- |
+| `talonpress_publish` | Publish or update a package by uploading selected files from a local folder. Omit `files` for a dry-run preview. Pass `package_id` to update an existing package. |
+| `talonpress_list_packages` | List packages with optional `visibility` filter and `limit`. |
+| `talonpress_get_package_status` | Fetch full status, file manifest, and tokens for a package. |
+| `talonpress_update_visibility` | Change a package's visibility; transitioning to private generates a new token. |
+| `talonpress_delete_package` | Permanently delete a package. |
+
+The `talonpress_publish` tool handles text and binary files automatically (binary files are base64-encoded), walks subdirectories recursively, and skips common noise directories (`.git`, `node_modules`, `.next`, `dist`, `build`).
 
 ---
 
