@@ -191,10 +191,9 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
           .describe('Existing package ID to update. Omit to create a new package.'),
         default_page: z
           .string()
-          .optional()
           .describe(
-            'Entry-point file served at the package root (default: index.html). ' +
-              'Useful when the main file has a different name.',
+            'Entry-point file served at the package root (e.g. index.html). ' +
+              'Specify the filename that should be served when the package root URL is requested.',
           ),
       }),
       execute: async (input) => {
@@ -256,7 +255,7 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
               name: input.name,
               visibility: input.visibility ?? 'public',
               files,
-              ...(input.default_page ? { default_page: input.default_page } : {}),
+              default_page: input.default_page,
             });
           }
 

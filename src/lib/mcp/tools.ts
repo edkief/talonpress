@@ -34,7 +34,7 @@ export function registerTools(server: McpServer): void {
           )
           .min(1)
           .describe('Array of files to publish'),
-        default_page: z.string().optional().describe('Entry-point file served at the package root (default: index.html)'),
+        default_page: z.string().min(1).describe('Entry-point file served at the package root (e.g. index.html)'),
       },
     },
     async ({ name, visibility, files, default_page }) => {
