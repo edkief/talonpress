@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
+import { DefaultPageEditor } from '@/components/DefaultPageEditor'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { config } from '@/lib/config'
 
@@ -89,6 +90,9 @@ export default async function PackageDetailPage({
                 <Row label="Name">{meta.name}</Row>
                 <Row label="Visibility">
                   <span className={`az-badge az-badge--${meta.visibility}`}>{meta.visibility}</span>
+                </Row>
+                <Row label="Default page">
+                  <DefaultPageEditor id={meta.id} defaultPage={meta.defaultPage ?? 'index.html'} files={meta.files} />
                 </Row>
                 {meta.disabled && (
                   <Row label="Status">

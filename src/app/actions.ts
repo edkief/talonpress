@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { disablePackage, enablePackage, deletePackage } from '@/lib/storage/deployments'
+import { disablePackage, enablePackage, deletePackage, updateDefaultPage } from '@/lib/storage/deployments'
 
 export async function disablePackageAction(id: string): Promise<void> {
   await disablePackage(id)
@@ -23,4 +23,9 @@ export async function deletePackageAction(id: string): Promise<void> {
   revalidatePath('/')
   revalidatePath('/packages')
   redirect('/packages')
+}
+
+export async function updateDefaultPageAction(id: string, defaultPage: string): Promise<void> {
+  await updateDefaultPage(id, defaultPage.trim())
+  revalidatePath(`/packages/${id}`)
 }

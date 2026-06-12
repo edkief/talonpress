@@ -241,6 +241,17 @@ export async function updatePackage(
   return updated
 }
 
+export async function updateDefaultPage(id: string, defaultPage: string): Promise<PackageMeta> {
+  const meta = await getPackageMeta(id)
+  if (!meta) throw new Error(`Package not found: ${id}`)
+
+  const now = new Date().toISOString()
+  const updated: PackageMeta = { ...meta, defaultPage, updatedAt: now }
+  await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
+  await appendRegistryEvent({ ts: now, event: 'update', id, visibility: meta.visibility, hash: meta.hash })
+  return updated
+}
+
 export async function disablePackage(id: string): Promise<PackageMeta> {
   const meta = await getPackageMeta(id)
   if (!meta) throw new Error(`Package not found: ${id}`)
