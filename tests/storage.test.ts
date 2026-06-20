@@ -137,6 +137,79 @@ describe('storage/deployments', () => {
     expect(tmps).toHaveLength(0)
   })
 
+  it('session create: chunked upload then finalize publishes, hash matches single-call', async () => {
+    const { publishPackage, beginPublishSession, uploadSessionFiles, finalizePublishSession, getPackageMeta } =
+      await import('../src/lib/storage/deployments')
+    const { distDir } = await import('../src/lib/storage/paths')
+
+    const files = [
+      { path: 'index.html', content: '<h1>Streamed</h1>' },
+      { path: 'a.css', content: 'body{}' },
+      { path: 'img.bin', content: Buffer.from([0, 1, 2, 3]).toString('base64'), encoding: 'base64' as const },
+    ]
+
+    const { sessionId } = await beginPublishSession({
+      mode: 'create',
+      name: 'Streamed Site',
+      visibility: 'public',
+      defaultPage: 'index.html',
+    })
+    // Upload across separate calls, like the client streams chunks.
+    await uploadSessionFiles(sessionId, [files[0]])
+    await uploadSessionFiles(sessionId, [files[1], files[2]])
+    const meta = await finalizePublishSession(sessionId)
+
+    expect(meta.defaultPage).toBe('index.html')
+    expect(meta.files).toEqual(expect.arrayContaining(['index.html', 'a.css', 'img.bin']))
+    expect(fs.readFileSync(path.join(distDir(meta.id), 'index.html'), 'utf8')).toBe('<h1>Streamed</h1>')
+    expect([...fs.readFileSync(path.join(distDir(meta.id), 'img.bin'))]).toEqual([0, 1, 2, 3])
+
+    // Streamed hash must equal a one-shot publish of the same bytes.
+    const single = await publishPackage('Single Site', 'public', files, 'index.html')
+    expect(meta.hash).toBe(single.hash)
+
+    // Session dir is consumed, none left behind.
+    const fetched = await getPackageMeta(meta.id)
+    expect(fetched?.hash).toBe(meta.hash)
+  })
+
+  it('session update: seeds existing files, overlays uploaded chunk', async () => {
+    const { publishPackage, beginPublishSession, uploadSessionFiles, finalizePublishSession } =
+      await import('../src/lib/storage/deployments')
+    const { distDir } = await import('../src/lib/storage/paths')
+
+    const base = await publishPackage('Upd Site', 'public', [
+      { path: 'index.html', content: '<h1>v1</h1>' },
+      { path: 'keep.css', content: 'body{}' },
+    ], 'index.html')
+
+    const { sessionId } = await beginPublishSession({ mode: 'update', packageId: base.id })
+    await uploadSessionFiles(sessionId, [
+      { path: 'index.html', content: '<h1>v2</h1>' },
+      { path: 'new.js', content: 'x' },
+    ])
+    const updated = await finalizePublishSession(sessionId)
+
+    expect(fs.readFileSync(path.join(distDir(base.id), 'index.html'), 'utf8')).toBe('<h1>v2</h1>')
+    expect(fs.readFileSync(path.join(distDir(base.id), 'keep.css'), 'utf8')).toBe('body{}')
+    expect(fs.readFileSync(path.join(distDir(base.id), 'new.js'), 'utf8')).toBe('x')
+    expect(updated.files).toEqual(expect.arrayContaining(['index.html', 'keep.css', 'new.js']))
+  })
+
+  it('session upload rejects path traversal', async () => {
+    const { beginPublishSession, uploadSessionFiles } = await import('../src/lib/storage/deployments')
+
+    const { sessionId } = await beginPublishSession({
+      mode: 'create',
+      name: 'Evil',
+      visibility: 'public',
+      defaultPage: 'index.html',
+    })
+    await expect(
+      uploadSessionFiles(sessionId, [{ path: '../escape.txt', content: 'pwn' }]),
+    ).rejects.toThrow(/Illegal file path/)
+  })
+
   it('list_packages filters by visibility', async () => {
     const { publishPackage, listPackages } = await import('../src/lib/storage/deployments')
 

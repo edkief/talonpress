@@ -31,6 +31,19 @@ export function tmpDir(): string {
   return path.join(deploymentsDir(), `.tmp-${rand}`)
 }
 
+export function sessionsDir(): string {
+  return path.join(storageRoot(), 'sessions')
+}
+
+// Session ids are validated to be hex-only before reaching the filesystem.
+export function sessionDir(sessionId: string): string {
+  return path.join(sessionsDir(), sessionId)
+}
+
+export function generateSessionId(): string {
+  return crypto.randomBytes(16).toString('hex')
+}
+
 export function slugify(name: string): string {
   return name
     .toLowerCase()

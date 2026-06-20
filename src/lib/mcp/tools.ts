@@ -7,6 +7,9 @@ import {
   updateVisibility,
   updatePackage,
   deletePackage,
+  beginPublishSession,
+  uploadSessionFiles,
+  finalizePublishSession,
 } from '../storage/deployments'
 import { config } from '../config'
 
@@ -215,6 +218,106 @@ export function registerTools(server: McpServer): void {
             }),
           },
         ],
+      }
+    },
+  )
+
+  // ─── Streaming publish session (for large packages) ───────────────────────
+  // Splits a publish across many small calls so no single request approaches
+  // the 10MB MCP body limit and neither side base64-buffers the whole package.
+
+  // begin_publish_session
+  server.registerTool(
+    'begin_publish_session',
+    {
+      description:
+        'Starts a streaming publish session for large packages. Returns a session_id; ' +
+        'upload files with upload_session_files, then call finalize_publish_session to publish. ' +
+        'Use mode "create" (with name + visibility) for a new package, or "update" (with package_id) for an existing one.',
+      inputSchema: {
+        mode: z.enum(['create', 'update']).describe('"create" a new package or "update" an existing one'),
+        name: z.string().min(1).optional().describe('Display name (required for mode "create")'),
+        visibility: z.enum(['public', 'private']).optional().describe('Access visibility (required for mode "create")'),
+        package_id: z.string().min(1).optional().describe('Package ID (required for mode "update")'),
+        default_page: z.string().min(1).optional().describe('Entry-point file served at the package root; may also be set at finalize'),
+      },
+    },
+    async ({ mode, name, visibility, package_id, default_page }) => {
+      try {
+        const { sessionId } = await beginPublishSession({ mode, name, visibility, packageId: package_id, defaultPage: default_page })
+        return { content: [{ type: 'text', text: JSON.stringify({ session_id: sessionId }) }] }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
+      }
+    },
+  )
+
+  // upload_session_files
+  server.registerTool(
+    'upload_session_files',
+    {
+      description:
+        'Uploads a chunk of files to an open publish session. Files are written straight to disk. ' +
+        'Keep each call comfortably under 10MB; call repeatedly until all files are sent, then finalize_publish_session.',
+      inputSchema: {
+        session_id: z.string().min(1).describe('Session ID from begin_publish_session'),
+        files: z
+          .array(
+            z.object({
+              path: z.string(),
+              content: z.string(),
+              encoding: z.enum(['utf8', 'base64']).optional().describe('Encoding of content; use base64 for binary files such as images'),
+            }),
+          )
+          .min(1)
+          .describe('Files in this chunk'),
+      },
+    },
+    async ({ session_id, files }) => {
+      try {
+        const res = await uploadSessionFiles(session_id, files)
+        return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
+      }
+    },
+  )
+
+  // finalize_publish_session
+  server.registerTool(
+    'finalize_publish_session',
+    {
+      description:
+        'Finalizes a publish session: promotes the uploaded files to a live deployment and returns the deployment ID, URL, and secure_token if private.',
+      inputSchema: {
+        session_id: z.string().min(1).describe('Session ID from begin_publish_session'),
+        default_page: z.string().min(1).optional().describe('Entry-point file served at the package root (overrides the value given at begin)'),
+      },
+    },
+    async ({ session_id, default_page }) => {
+      try {
+        const meta = await finalizePublishSession(session_id, default_page)
+        const url = packageUrl(meta.id, meta.secure_token)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: meta.id,
+                url,
+                visibility: meta.visibility,
+                ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
+                ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
+                hash: meta.hash,
+                files: meta.files,
+                createdAt: meta.createdAt,
+                updatedAt: meta.updatedAt,
+              }),
+            },
+          ],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
       }
     },
   )
