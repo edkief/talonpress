@@ -1,7 +1,13 @@
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import { CleanupOldPackages } from '@/components/CleanupOldPackages'
 import { listPackages } from '@/lib/storage/deployments'
+import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
+import type { PackageMeta } from '@/lib/storage/types'
+
+const RECENT_WINDOW_HOURS = 48
+const STALE_THRESHOLD_DAYS = 30
 
 function IconPackage({ size = 16 }: { size?: number }) {
   return (
@@ -30,11 +36,40 @@ function IconLock({ size = 16 }: { size?: number }) {
   )
 }
 
+function IconDatabase({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <ellipse cx="8" cy="3.5" rx="5.5" ry="2" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M2.5 3.5v9c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-9M2.5 8c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2" stroke="currentColor" strokeWidth="1.25" />
+    </svg>
+  )
+}
+
+function IconClock({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+// Split packages by last-activity windows. Kept outside the component so the
+// (impure) clock read isn't flagged by react-hooks/purity during render.
+function summarizePackages(packages: PackageMeta[]) {
+  const now = Date.now()
+  const recentCutoff = now - RECENT_WINDOW_HOURS * 60 * 60 * 1000
+  const staleCutoff = now - STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000
+  const recentPackages = packages.filter(p => new Date(p.updatedAt).getTime() >= recentCutoff)
+  const staleCount = packages.filter(p => new Date(p.updatedAt).getTime() < staleCutoff).length
+  return { recentPackages, staleCount }
 }
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +78,10 @@ export default async function DashboardPage() {
   const packages = await listPackages()
   const publicCount = packages.filter(p => p.visibility === 'public').length
   const privateCount = packages.filter(p => p.visibility === 'private').length
+
+  const totalSize = packages.reduce((sum, p) => sum + (p.sizeBytes ?? 0), 0)
+
+  const { recentPackages, staleCount } = summarizePackages(packages)
 
   return (
     <div className="az-shell">
@@ -84,6 +123,15 @@ export default async function DashboardPage() {
               </div>
             </div>
             <div className="az-stat">
+              <div className="az-stat-icon az-stat-icon--indigo-dark">
+                <IconDatabase size={20} />
+              </div>
+              <div>
+                <div className="az-stat-value">{formatBytes(totalSize)}</div>
+                <div className="az-stat-label">Total storage</div>
+              </div>
+            </div>
+            <div className="az-stat">
               <div className="az-stat-icon az-stat-icon--emerald-dark">
                 <IconGlobe size={20} />
               </div>
@@ -103,18 +151,42 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Packages table */}
+          {/* Stale packages / maintenance */}
+          <div className="az-panel" style={{ marginBottom: '1rem' }}>
+            <div className="az-panel-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <div className="az-stat-icon az-stat-icon--amber-dark">
+                  <IconClock size={18} />
+                </div>
+                <div>
+                  <h2 className="az-panel-title">
+                    {staleCount} {staleCount === 1 ? 'package' : 'packages'} older than {STALE_THRESHOLD_DAYS} days
+                  </h2>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--fg3)', marginTop: '0.125rem' }}>
+                    Not updated in over {STALE_THRESHOLD_DAYS} days. Clean up to permanently delete them.
+                  </div>
+                </div>
+              </div>
+              <CleanupOldPackages count={staleCount} days={STALE_THRESHOLD_DAYS} />
+            </div>
+          </div>
+
+          {/* Recently active packages */}
           <div className="az-panel">
             <div className="az-panel-header">
-              <h2 className="az-panel-title">Packages</h2>
+              <h2 className="az-panel-title">Recent activity</h2>
               <span style={{ fontSize: '0.8125rem', color: 'var(--fg3)' }}>
-                {packages.length} total
+                Last {RECENT_WINDOW_HOURS}h · {recentPackages.length}
               </span>
             </div>
             <div className="az-table-wrap">
-              {packages.length === 0 ? (
+              {recentPackages.length === 0 ? (
                 <div className="az-empty">
-                  No packages published yet. Use the MCP tools to publish your first package.
+                  No packages published or updated in the last {RECENT_WINDOW_HOURS} hours.{' '}
+                  <Link href="/packages" style={{ color: 'var(--indigo-400)' }}>
+                    View all packages
+                  </Link>
+                  .
                 </div>
               ) : (
                 <table className="az-table">
@@ -124,12 +196,13 @@ export default async function DashboardPage() {
                       <th>ID</th>
                       <th>Visibility</th>
                       <th>Files</th>
+                      <th>Size</th>
                       <th>Updated</th>
                       <th>Access URL</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {packages.map(pkg => (
+                    {recentPackages.map(pkg => (
                       <tr key={pkg.id}>
                         <td>
                           <Link
@@ -149,6 +222,7 @@ export default async function DashboardPage() {
                           </span>
                         </td>
                         <td className="az-text-muted">{pkg.files.length}</td>
+                        <td className="az-text-muted az-text-sm">{formatBytes(pkg.sizeBytes)}</td>
                         <td className="az-text-muted az-text-sm">{formatDate(pkg.updatedAt)}</td>
                         <td>
                           <a

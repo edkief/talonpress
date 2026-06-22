@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
 import { DefaultPageEditor } from '@/components/DefaultPageEditor'
 import { getPackageMeta } from '@/lib/storage/deployments'
+import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
 
 function formatDate(iso: string): string {
@@ -117,6 +118,7 @@ export default async function PackageDetailPage({
                     </span>
                   </Row>
                 )}
+                <Row label="Size">{formatBytes(meta.sizeBytes)}</Row>
                 <Row label="Build hash">
                   <span className="az-tag az-mono">{meta.hash}</span>
                 </Row>

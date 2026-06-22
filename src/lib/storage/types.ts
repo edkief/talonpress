@@ -15,6 +15,8 @@ export interface PackageMeta {
   defaultPage?: string
   hash: string
   files: string[]
+  /** Total size of all package files in bytes. Recomputed on every (re)publish. */
+  sizeBytes?: number
   createdAt: string
   updatedAt: string
   deleted: boolean

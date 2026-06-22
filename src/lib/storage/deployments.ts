@@ -85,6 +85,22 @@ async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
+// Sum the on-disk size of every file under `dir`. Computed once at (re)publish
+// time and persisted in meta.json, so the listing never has to walk the tree.
+async function dirSize(dir: string): Promise<number> {
+  const files = await listFilesRecursive(dir)
+  let total = 0
+  for (const rel of files) {
+    try {
+      const stat = await fs.promises.stat(path.join(dir, rel))
+      total += stat.size
+    } catch {
+      // ignore — file vanished between listing and stat
+    }
+  }
+  return total
+}
+
 async function listFilesRecursive(dir: string, base = dir): Promise<string[]> {
   const results: string[] = []
   let entries: fs.Dirent[]
@@ -132,6 +148,12 @@ export async function publishPackage(
   const id = generateId(name)
   const slug = id
   const hash = computeHash(files)
+  const sizeBytes = files.reduce(
+    (sum, f) => sum + (f.encoding === 'base64'
+      ? Buffer.byteLength(f.content, 'base64')
+      : Buffer.byteLength(f.content, 'utf8')),
+    0,
+  )
   const now = new Date().toISOString()
   const secure_token = visibility === 'private' ? generateToken() : undefined
 
@@ -144,6 +166,7 @@ export async function publishPackage(
     defaultPage: effectivePage,
     hash,
     files: filePaths,
+    sizeBytes,
     createdAt: now,
     updatedAt: now,
     deleted: false,
@@ -176,6 +199,16 @@ export async function getPackageMeta(id: string): Promise<PackageMeta | null> {
     const raw = await fs.promises.readFile(mPath, 'utf8')
     const meta: PackageMeta = JSON.parse(raw)
     if (meta.deleted) return null
+    // Backfill size for packages published before sizeBytes was tracked. This
+    // walks the tree once and persists the result, so subsequent reads are free.
+    if (meta.sizeBytes === undefined) {
+      meta.sizeBytes = await dirSize(distDir(id))
+      try {
+        await fs.promises.writeFile(mPath, JSON.stringify(meta, null, 2), 'utf8')
+      } catch {
+        // read-only fs or race — fall back to the in-memory value
+      }
+    }
     return meta
   } catch {
     return null
@@ -256,6 +289,7 @@ export async function updatePackage(
 
   const allFiles = await listFilesRecursive(tmpDist)
   const hash = computeHash(allFiles.map(f => ({ path: f, content: '' })))
+  const sizeBytes = await dirSize(tmpDist)
 
   if (defaultPage !== undefined && !allFiles.includes(defaultPage)) {
     throw new Error(`defaultPage "${defaultPage}" does not exist in the package files`)
@@ -266,6 +300,7 @@ export async function updatePackage(
     ...(defaultPage !== undefined ? { defaultPage } : {}),
     hash,
     files: allFiles,
+    sizeBytes,
     updatedAt: now,
   }
 
@@ -461,6 +496,7 @@ export async function finalizePublishSession(
 
   const requestedPage = defaultPageOverride ?? session.defaultPage
   const hash = await hashDir(dist)
+  const sizeBytes = await dirSize(dist)
   const now = new Date().toISOString()
 
   if (session.mode === 'create') {
@@ -483,6 +519,7 @@ export async function finalizePublishSession(
       defaultPage: effectivePage,
       hash,
       files: allFiles,
+      sizeBytes,
       createdAt: now,
       updatedAt: now,
       deleted: false,
@@ -511,6 +548,7 @@ export async function finalizePublishSession(
     ...(requestedPage !== undefined ? { defaultPage: requestedPage } : {}),
     hash,
     files: allFiles,
+    sizeBytes,
     updatedAt: now,
   }
 
@@ -527,6 +565,24 @@ export async function finalizePublishSession(
 
   await appendRegistryEvent({ ts: now, event: 'update', id: session.packageId!, visibility: existing.visibility, hash })
   return updated
+}
+
+// Delete every package whose last activity (updatedAt) is older than
+// `maxAgeDays`. Returns the ids that were removed. Used by the dashboard
+// "stale packages" cleanup and the POST /api/packages/cleanup route.
+export async function deleteOldPackages(
+  maxAgeDays = 30,
+): Promise<{ deleted: string[] }> {
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+  const packages = await listPackages()
+  const deleted: string[] = []
+  for (const pkg of packages) {
+    if (new Date(pkg.updatedAt).getTime() < cutoff) {
+      await deletePackage(pkg.id)
+      deleted.push(pkg.id)
+    }
+  }
+  return { deleted }
 }
 
 export async function deletePackage(id: string): Promise<void> {

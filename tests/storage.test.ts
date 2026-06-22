@@ -237,4 +237,25 @@ describe('storage/deployments', () => {
     const limited = await listPackages(undefined, 2)
     expect(limited).toHaveLength(2)
   })
+
+  it('deleteOldPackages removes only packages older than the threshold', async () => {
+    const { publishPackage, deleteOldPackages, getPackageMeta, listPackages } =
+      await import('../src/lib/storage/deployments')
+
+    const fresh = await publishPackage('Fresh', 'public', [{ path: 'i.html', content: '' }], 'i.html')
+    const stale = await publishPackage('Stale', 'public', [{ path: 'i.html', content: '' }], 'i.html')
+
+    // Backdate the stale package's updatedAt to 40 days ago.
+    const { metaPath } = await import('../src/lib/storage/paths')
+    const raw = JSON.parse(fs.readFileSync(metaPath(stale.id), 'utf8'))
+    raw.updatedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
+    fs.writeFileSync(metaPath(stale.id), JSON.stringify(raw))
+
+    const { deleted } = await deleteOldPackages(30)
+
+    expect(deleted).toEqual([stale.id])
+    expect(await getPackageMeta(stale.id)).toBeNull()
+    expect(await getPackageMeta(fresh.id)).not.toBeNull()
+    expect(await listPackages()).toHaveLength(1)
+  })
 })

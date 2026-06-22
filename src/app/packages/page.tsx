@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
 import { listPackages } from '@/lib/storage/deployments'
+import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
 
 function IconGlobe({ size = 14 }: { size?: number }) {
@@ -55,6 +56,7 @@ export default async function PackagesPage() {
                       <th>Name</th>
                       <th>Visibility</th>
                       <th>Files</th>
+                      <th>Size</th>
                       <th>Build hash</th>
                       <th>Created</th>
                       <th>Updated</th>
@@ -81,6 +83,7 @@ export default async function PackagesPage() {
                           </span>
                         </td>
                         <td className="az-text-muted">{pkg.files.length}</td>
+                        <td className="az-text-muted az-text-sm">{formatBytes(pkg.sizeBytes)}</td>
                         <td>
                           <span className="az-tag az-mono">{pkg.hash.slice(0, 12)}</span>
                         </td>

@@ -416,3 +416,61 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-size: 0.75rem;
   font-family: ui-monospace, monospace;
 }
+
+/* ─── Responsive: tablet & mobile ───────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Stack the shell: sidebar collapses into a horizontal top bar */
+  .az-shell { flex-direction: column; }
+
+  .az-sidebar {
+    position: static;
+    width: 100%;
+    bottom: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .az-sidebar-head {
+    border-bottom: none;
+    flex: 1;
+    min-width: 0;
+  }
+  .az-nav {
+    flex: initial;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0.5rem;
+  }
+  .az-nav-group { margin-bottom: 0; display: flex; gap: 0.25rem; }
+  .az-nav-label { display: none; }
+  .az-nav-item { margin: 0; }
+  .az-sidebar-foot { display: none; }
+
+  /* Main area takes full width — no fixed sidebar to offset */
+  .az-main { margin-left: 0; }
+
+  /* Topbar wraps instead of clipping; trailing actions drop to a new line */
+  .az-topbar {
+    height: auto;
+    min-height: var(--topbar-h);
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    row-gap: 0.5rem;
+  }
+  .az-topbar-title { font-size: 0.875rem; }
+
+  /* Tighter content padding on small screens */
+  .az-content { padding: 1rem; }
+
+  /* Single-column stat cards read better than cramped multi-column */
+  .az-stats-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .az-stats-grid { grid-template-columns: 1fr; }
+  .az-content { padding: 0.75rem; }
+}
