@@ -31,8 +31,24 @@ function formatDate(iso: string): string {
 
 export const dynamic = 'force-dynamic'
 
-export default async function PackagesPage() {
+const PAGE_SIZE = 20
+
+export default async function PackagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>
+}) {
   const packages = await listPackages()
+
+  const { page: pageParam } = await searchParams
+  const total = packages.length
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const requestedPage = Number.parseInt(pageParam ?? '1', 10)
+  const currentPage = Number.isNaN(requestedPage)
+    ? 1
+    : Math.min(Math.max(requestedPage, 1), totalPages)
+  const start = (currentPage - 1) * PAGE_SIZE
+  const pageItems = packages.slice(start, start + PAGE_SIZE)
 
   return (
     <div className="az-shell">
@@ -41,7 +57,7 @@ export default async function PackagesPage() {
         <header className="az-topbar">
           <h1 className="az-topbar-title">Packages</h1>
           <span style={{ fontSize: '0.8125rem', color: 'var(--fg3)' }}>
-            {packages.length} total
+            {total} total
           </span>
         </header>
         <div className="az-content">
@@ -64,7 +80,7 @@ export default async function PackagesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {packages.map(pkg => (
+                    {pageItems.map(pkg => (
                       <tr key={pkg.id}>
                         <td style={{ fontWeight: 500 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -119,6 +135,42 @@ export default async function PackagesPage() {
                 </table>
               )}
             </div>
+            {totalPages > 1 && (
+              <div className="az-pagination">
+                <span className="az-text-muted az-text-sm">
+                  {start + 1}–{Math.min(start + PAGE_SIZE, total)} of {total}
+                </span>
+                <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                  {currentPage > 1 ? (
+                    <Link
+                      href={`/packages?page=${currentPage - 1}`}
+                      className="az-btn az-btn--ghost az-btn--sm"
+                    >
+                      Previous
+                    </Link>
+                  ) : (
+                    <span className="az-btn az-btn--ghost az-btn--sm az-btn--disabled">
+                      Previous
+                    </span>
+                  )}
+                  <span className="az-text-muted az-text-sm" style={{ padding: '0 0.5rem' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  {currentPage < totalPages ? (
+                    <Link
+                      href={`/packages?page=${currentPage + 1}`}
+                      className="az-btn az-btn--ghost az-btn--sm"
+                    >
+                      Next
+                    </Link>
+                  ) : (
+                    <span className="az-btn az-btn--ghost az-btn--sm az-btn--disabled">
+                      Next
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
