@@ -1,26 +1,10 @@
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
+import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
 import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
-
-function IconGlobe({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M8 1.5c-2 2-3 4-3 6.5s1 4.5 3 6.5M8 1.5c2 2 3 4 3 6.5s-1 4.5-3 6.5M1.5 8h13" stroke="currentColor" strokeWidth="1.25" />
-    </svg>
-  )
-}
-function IconLock({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-    </svg>
-  )
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -93,10 +77,7 @@ export default async function PackagesPage({
                           </div>
                         </td>
                         <td>
-                          <span className={`az-badge az-badge--${pkg.visibility}`}>
-                            {pkg.visibility === 'public' ? <IconGlobe size={11} /> : <IconLock size={11} />}
-                            {pkg.visibility}
-                          </span>
+                          <VisibilityToggle id={pkg.id} visibility={pkg.visibility} />
                         </td>
                         <td className="az-text-muted">{pkg.files.length}</td>
                         <td className="az-text-muted az-text-sm">{formatBytes(pkg.sizeBytes)}</td>

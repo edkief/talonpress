@@ -266,6 +266,19 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .az-badge--private { background: rgba(245,158,11,0.15); color: var(--amber-400); }
 .az-badge--deleted { background: rgba(239,68,68,0.15); color: var(--red-400); }
 .az-badge--disabled { background: rgba(107,114,128,0.2); color: var(--gray-400); }
+.az-badge--toggle {
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: none;
+  transition: border-color 0.12s ease, filter 0.12s ease;
+}
+.az-badge--toggle:not(:disabled):hover {
+  filter: brightness(1.15);
+  border-color: currentColor;
+}
 
 /* ─── Buttons ───────────────────────────────────────────────────────── */
 .az-btn {
