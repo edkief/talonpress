@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import { CleanupOldPackages } from '@/components/CleanupOldPackages'
+import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
 import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
@@ -216,10 +217,7 @@ export default async function DashboardPage() {
                           <span className="az-tag az-mono">{pkg.id}</span>
                         </td>
                         <td>
-                          <span className={`az-badge az-badge--${pkg.visibility}`}>
-                            {pkg.visibility === 'public' ? <IconGlobe size={11} /> : <IconLock size={11} />}
-                            {pkg.visibility}
-                          </span>
+                          <VisibilityToggle id={pkg.id} visibility={pkg.visibility} />
                         </td>
                         <td className="az-text-muted">{pkg.files.length}</td>
                         <td className="az-text-muted az-text-sm">{formatBytes(pkg.sizeBytes)}</td>

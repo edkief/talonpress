@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
 import { DefaultPageEditor } from '@/components/DefaultPageEditor'
+import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
@@ -90,7 +91,7 @@ export default async function PackageDetailPage({
                 </Row>
                 <Row label="Name">{meta.name}</Row>
                 <Row label="Visibility">
-                  <span className={`az-badge az-badge--${meta.visibility}`}>{meta.visibility}</span>
+                  <VisibilityToggle id={meta.id} visibility={meta.visibility} />
                 </Row>
                 <Row label="Default page">
                   <DefaultPageEditor id={meta.id} defaultPage={meta.defaultPage ?? 'index.html'} files={meta.files} />
