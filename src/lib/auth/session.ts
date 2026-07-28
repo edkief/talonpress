@@ -123,7 +123,7 @@ export function grantPackageSession(cookieHeader: string | null, packageId: stri
 
   const flags = [
     `${PKG_COOKIE_NAME}=${cookieValue}`,
-    `Path=/pub`,
+    `Path=/`,
     `HttpOnly`,
     `SameSite=Lax`,
     `Max-Age=${maxAge}`,
