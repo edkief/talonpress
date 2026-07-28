@@ -5,8 +5,8 @@ import { PackageActions } from '@/components/PackageActions'
 import { DefaultPageEditor } from '@/components/DefaultPageEditor'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { getPackageMeta } from '@/lib/storage/deployments'
+import { packageAccessUrl } from '@/lib/storage/urls'
 import { formatBytes } from '@/lib/format'
-import { config } from '@/lib/config'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -39,7 +39,7 @@ export default async function PackageDetailPage({
   const meta = await getPackageMeta(id)
   if (!meta) notFound()
 
-  const accessUrl = `${config.publicBaseUrl}/pub/${meta.id}${meta.secure_token ? `?token=${meta.secure_token}` : ''}`
+  const accessUrl = packageAccessUrl(meta.id, meta.secure_token)
 
   return (
     <div className="az-shell">
@@ -156,7 +156,7 @@ export default async function PackageDetailPage({
                         </td>
                         <td>
                           <a
-                            href={`${config.publicBaseUrl}/pub/${meta.id}/${file}${meta.secure_token ? `?token=${meta.secure_token}` : ''}`}
+                            href={packageAccessUrl(`${meta.id}/${file}`, meta.secure_token)}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ color: 'var(--indigo-400)', fontSize: '0.8125rem' }}

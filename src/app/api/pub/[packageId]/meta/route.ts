@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getPackageMeta, updateVisibility } from '@/lib/storage/deployments'
 import { verifySession, verifyPackageSession } from '@/lib/auth/session'
 import { config } from '@/lib/config'
+import { packageAccessUrl } from '@/lib/storage/urls'
 import type { PackageMeta, Visibility } from '@/lib/storage/types'
 
 const postSchema = z.object({
@@ -19,11 +20,10 @@ interface MetaResponse {
 }
 
 function buildShareUrl(meta: PackageMeta): string {
-  const base = `${config.publicBaseUrl}/pub/${meta.id}`
   if (meta.visibility === 'private' && meta.secure_token) {
-    return `${base}?token=${meta.secure_token}`
+    return packageAccessUrl(meta.id, meta.secure_token)
   }
-  return base
+  return packageAccessUrl(meta.id)
 }
 
 function buildResponse(meta: PackageMeta, canToggle: boolean): MetaResponse {

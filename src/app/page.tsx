@@ -3,6 +3,7 @@ import Sidebar from '@/components/Sidebar'
 import { CleanupOldPackages } from '@/components/CleanupOldPackages'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
+import { packageAccessUrl } from '@/lib/storage/urls'
 import { formatBytes } from '@/lib/format'
 import { config } from '@/lib/config'
 import type { PackageMeta } from '@/lib/storage/types'
@@ -224,7 +225,7 @@ export default async function DashboardPage() {
                         <td className="az-text-muted az-text-sm">{formatDate(pkg.updatedAt)}</td>
                         <td>
                           <a
-                            href={`${config.publicBaseUrl}/pub/${pkg.id}`}
+                            href={packageAccessUrl(pkg.id, pkg.secure_token)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="az-text-sm"

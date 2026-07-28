@@ -11,12 +11,7 @@ import {
   uploadSessionFiles,
   finalizePublishSession,
 } from '../storage/deployments'
-import { config } from '../config'
-
-function packageUrl(id: string, token?: string): string {
-  const base = `${config.publicBaseUrl}/pub/${id}`
-  return token ? `${base}?token=${token}` : base
-}
+import { packageAccessUrl as packageUrl } from '../storage/urls'
 
 export function registerTools(server: McpServer): void {
   // publish_package

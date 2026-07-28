@@ -3,8 +3,8 @@ import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
+import { packageAccessUrl } from '@/lib/storage/urls'
 import { formatBytes } from '@/lib/format'
-import { config } from '@/lib/config'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -89,7 +89,7 @@ export default async function PackagesPage({
                         <td>
                           <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
                             <a
-                              href={`${config.publicBaseUrl}/pub/${pkg.id}`}
+                              href={packageAccessUrl(pkg.id, pkg.secure_token)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="az-btn az-btn--ghost az-btn--sm"
