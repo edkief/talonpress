@@ -7,6 +7,7 @@ import { getContentType } from '@/lib/security'
 import { verifySession, verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
 import { config } from '@/lib/config'
 import { renderMarkdown } from '@/lib/markdown'
+import { injectBubble } from '@/lib/pubBubble/inject'
 
 export async function GET(
   request: NextRequest,
@@ -74,7 +75,7 @@ export async function GET(
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, indexPath, stat), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, stat), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -95,14 +96,14 @@ export async function GET(
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, indexPath, idxStat), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, idxStat), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return withCookie(await serveFile(request, safePath, stat), pkgSessionCookie)
+  return withCookie(await serveFile(request, packageId, safePath, stat), pkgSessionCookie)
 }
 
 function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
@@ -110,7 +111,7 @@ function withCookie(response: NextResponse, cookie: string | undefined): NextRes
   return response
 }
 
-async function serveFile(request: NextRequest, filePath: string, stat: fs.Stats): Promise<NextResponse> {
+async function serveFile(request: NextRequest, packageId: string, filePath: string, stat: fs.Stats): Promise<NextResponse> {
   const ext = path.extname(filePath).slice(1).toLowerCase()
 
   if (ext === 'md') {
@@ -126,7 +127,19 @@ async function serveFile(request: NextRequest, filePath: string, stat: fs.Stats)
       })
     }
     const title = path.basename(filePath, '.md')
-    return new NextResponse(renderMarkdown(source, title), {
+    const rendered = renderMarkdown(source, title)
+    return new NextResponse(injectBubble(rendered, bubbleOptions(packageId)), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+      },
+    })
+  }
+
+  if (ext === 'html' || ext === 'htm') {
+    const source = await fs.promises.readFile(filePath, 'utf8')
+    return new NextResponse(injectBubble(source, bubbleOptions(packageId)), {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
@@ -136,6 +149,10 @@ async function serveFile(request: NextRequest, filePath: string, stat: fs.Stats)
   }
 
   return streamFile(filePath, stat)
+}
+
+function bubbleOptions(packageId: string): { packageId: string; metaUrl: string } {
+  return { packageId, metaUrl: `/api/pub/${packageId}/meta` }
 }
 
 function streamFile(filePath: string, stat: fs.Stats): NextResponse {

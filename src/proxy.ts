@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifySession } from '@/lib/auth/session'
 import { config as appConfig } from '@/lib/config'
 
-const PUBLIC_PREFIXES = ['/auth', '/api/mcp', '/pub', '/_next', '/favicon', '/_not-found']
+const PUBLIC_PREFIXES = ['/auth', '/api/mcp', '/api/pub', '/pub', '/_next', '/favicon', '/_not-found']
 
 function isProtected(pathname: string): boolean {
   if (!appConfig.authEnabled) return false
