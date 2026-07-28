@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { PackageActions } from '@/components/PackageActions'
 import { DefaultPageEditor } from '@/components/DefaultPageEditor'
+import { RenewTokenButton } from '@/components/RenewTokenButton'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { packageAccessUrl } from '@/lib/storage/urls'
@@ -114,9 +115,17 @@ export default async function PackageDetailPage({
                 </Row>
                 {meta.secure_token && (
                   <Row label="Token">
-                    <span className="az-tag az-mono" style={{ wordBreak: 'break-all' }}>
-                      {meta.secure_token}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span className="az-tag az-mono" style={{ wordBreak: 'break-all' }}>
+                        {meta.secure_token}
+                      </span>
+                      {meta.visibility === 'private' && <RenewTokenButton id={meta.id} />}
+                    </div>
+                  </Row>
+                )}
+                {meta.secure_token && (
+                  <Row label="Token last generated">
+                    {meta.tokenGeneratedAt ? formatDate(meta.tokenGeneratedAt) : '—'}
                   </Row>
                 )}
                 <Row label="Size">{formatBytes(meta.sizeBytes)}</Row>

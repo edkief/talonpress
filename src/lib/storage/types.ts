@@ -12,6 +12,8 @@ export interface PackageMeta {
   slug: string
   visibility: Visibility
   secure_token?: string
+  /** ISO timestamp of the most recent secure_token generation. Undefined for tokens generated before this field was tracked. */
+  tokenGeneratedAt?: string
   defaultPage?: string
   hash: string
   files: string[]
@@ -23,7 +25,7 @@ export interface PackageMeta {
   disabled?: boolean
 }
 
-export type RegistryEventType = 'publish' | 'update' | 'visibility' | 'delete' | 'disable' | 'enable'
+export type RegistryEventType = 'publish' | 'update' | 'visibility' | 'delete' | 'disable' | 'enable' | 'token_renew'
 
 export interface RegistryEvent {
   ts: string

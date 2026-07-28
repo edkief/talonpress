@@ -97,7 +97,7 @@ describe('storage/deployments', () => {
     expect(fetched).toBeNull()
   })
 
-  it('update_visibility to private generates new token', async () => {
+  it('update_visibility to private generates new token when none exists', async () => {
     const { publishPackage, updateVisibility } = await import('../src/lib/storage/deployments')
 
     const meta = await publishPackage('Vis Test', 'public', [
@@ -108,19 +108,63 @@ describe('storage/deployments', () => {
     const updated = await updateVisibility(meta.id, 'private')
     expect(updated.visibility).toBe('private')
     expect(updated.secure_token).toMatch(/^[0-9a-f]{64}$/)
+    expect(updated.tokenGeneratedAt).toBeDefined()
   })
 
-  it('update_visibility to public clears token', async () => {
+  it('update_visibility preserves token across public ↔ private toggles', async () => {
     const { publishPackage, updateVisibility } = await import('../src/lib/storage/deployments')
 
-    const meta = await publishPackage('Vis Test 2', 'private', [
+    const meta = await publishPackage('Vis Test Toggle', 'private', [
       { path: 'index.html', content: '...' },
     ])
-    expect(meta.secure_token).toBeDefined()
+    const originalToken = meta.secure_token
+    const originalStamp = meta.tokenGeneratedAt
+    expect(originalToken).toBeDefined()
 
-    const updated = await updateVisibility(meta.id, 'public')
-    expect(updated.visibility).toBe('public')
-    expect(updated.secure_token).toBeUndefined()
+    const publicVersion = await updateVisibility(meta.id, 'public')
+    expect(publicVersion.visibility).toBe('public')
+    // Token is preserved, not deleted
+    expect(publicVersion.secure_token).toBe(originalToken)
+    expect(publicVersion.tokenGeneratedAt).toBe(originalStamp)
+
+    const privateAgain = await updateVisibility(meta.id, 'private')
+    expect(privateAgain.visibility).toBe('private')
+    // Same token comes back — not rotated
+    expect(privateAgain.secure_token).toBe(originalToken)
+    expect(privateAgain.tokenGeneratedAt).toBe(originalStamp)
+  })
+
+  it('renewPackageToken rotates token and updates timestamp', async () => {
+    const { publishPackage, renewPackageToken, getPackageMeta } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Renew Test', 'private', [
+      { path: 'index.html', content: '...' },
+    ])
+    const originalToken = meta.secure_token!
+    const originalStamp = meta.tokenGeneratedAt!
+
+    // Force a measurable clock tick between generation and renewal
+    await new Promise(r => setTimeout(r, 5))
+
+    const renewed = await renewPackageToken(meta.id)
+    expect(renewed.secure_token).toBeDefined()
+    expect(renewed.secure_token).not.toBe(originalToken)
+    expect(renewed.tokenGeneratedAt).not.toBe(originalStamp)
+    expect(renewed.tokenGeneratedAt! > originalStamp).toBe(true)
+
+    // Persisted to disk
+    const reread = await getPackageMeta(meta.id)
+    expect(reread?.secure_token).toBe(renewed.secure_token)
+    expect(reread?.tokenGeneratedAt).toBe(renewed.tokenGeneratedAt)
+  })
+
+  it('renewPackageToken rejects non-private packages', async () => {
+    const { publishPackage, renewPackageToken } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Renew Public', 'public', [
+      { path: 'index.html', content: '...' },
+    ])
+    await expect(renewPackageToken(meta.id)).rejects.toThrow(/private/)
   })
 
   it('atomic write: no partial deployment on disk', async () => {

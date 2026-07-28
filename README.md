@@ -51,9 +51,10 @@ Agents can execute actions using these schema-defined tools:
 | `publish_package` | `name` (string)<br>`visibility` (`"public"` &#124; `"private"`)<br>`files` (array of `{ path: string, content: string, encoding?: "utf8" \| "base64" }`)<br>`default_page` (string) | Compiles and publishes a new web package. Returns the deployment ID, base access URL, and a `secure_token` if private. `default_page` must be a path present in `files`. |
 | `list_packages` | `visibility` (optional string)<br>`limit` (optional integer) | Returns an array of available packages, their visibility status, and access URLs. |
 | `get_package_status` | `package_id` (string) | Fetches the live status, route configuration, file manifest, and active tokens for a specific package. |
-| `update_visibility` | `package_id` (string)<br>`visibility` (`"public"` &#124; `"private"`) | Modifies access permissions. Transitioning to `private` automatically generates a new secure token. |
+| `update_visibility` | `package_id` (string)<br>`visibility` (`"public"` &#124; `"private"`) | Modifies access permissions. The existing `secure_token` is preserved across toggles — only a fresh package (no token yet) gets one on going private. Use `renew_token` to explicitly rotate a token that has leaked. |
 | `update_package` | `package_id` (string)<br>`files` (array of `{ path: string, content: string, encoding?: "utf8" \| "base64" }`)<br>`default_page` (optional string) | Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched, and updates the `updatedAt` timestamp and build hash. If `default_page` is provided it must exist in the resulting merged file set. |
 | `delete_package` | `package_id` (string) | Purges the deployment directory and marks the package as deleted in the registry log. |
+| `renew_token` | `package_id` (string) | Rotates the `secure_token` of a private package and updates `tokenGeneratedAt`. Anyone holding the previous token loses access. Package must be private. |
 
 ### 📂 Resources
 
@@ -198,7 +199,8 @@ const tools = getTalonpressTools({
 | `talonpress_publish` | Publish or update a package by uploading selected files from a local folder. Omit `files` for a dry-run preview. Pass `package_id` to update an existing package. |
 | `talonpress_list_packages` | List packages with optional `visibility` filter and `limit`. |
 | `talonpress_get_package_status` | Fetch full status, file manifest, and tokens for a package. |
-| `talonpress_update_visibility` | Change a package's visibility; transitioning to private generates a new token. |
+| `talonpress_update_visibility` | Change a package's visibility. The existing token is preserved across toggles. |
+| `talonpress_renew_token` | Rotate a private package's `secure_token` (use when a token has leaked). |
 | `talonpress_delete_package` | Permanently delete a package. |
 
 The `talonpress_publish` tool handles text and binary files automatically (binary files are base64-encoded), walks subdirectories recursively, and skips common noise directories (`.git`, `node_modules`, `.next`, `dist`, `build`).

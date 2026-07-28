@@ -375,7 +375,9 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
     talonpress_update_visibility: tool({
       description:
         'Modify the access visibility of a TalonPress package. ' +
-        'Transitioning to "private" automatically generates a new secure token.',
+        'The existing secure_token is preserved across toggles; only a package ' +
+        'with no token gets one when going private. Use talonpress_renew_token ' +
+        'to explicitly rotate a token that has leaked.',
       inputSchema: z.object({
         package_id: z.string().describe('Package ID.'),
         visibility: z.enum(['public', 'private']).describe('New visibility.'),
@@ -383,6 +385,23 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
       execute: async (input) => {
         try {
           return await callTalonpress(cfg, 'update_visibility', input as Record<string, unknown>);
+        } catch (err) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      },
+    }),
+
+    talonpress_renew_token: tool({
+      description:
+        'Rotate the secure_token of a private TalonPress package. ' +
+        'Use this when a token has leaked — anyone holding the previous token ' +
+        'loses access immediately. The package must be private.',
+      inputSchema: z.object({
+        package_id: z.string().describe('Package ID.'),
+      }),
+      execute: async (input) => {
+        try {
+          return await callTalonpress(cfg, 'renew_token', input as Record<string, unknown>);
         } catch (err) {
           return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }

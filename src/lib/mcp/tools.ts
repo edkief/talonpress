@@ -10,6 +10,7 @@ import {
   beginPublishSession,
   uploadSessionFiles,
   finalizePublishSession,
+  renewPackageToken,
 } from '../storage/deployments'
 import { packageAccessUrl as packageUrl } from '../storage/urls'
 
@@ -137,7 +138,8 @@ export function registerTools(server: McpServer): void {
   server.registerTool(
     'update_visibility',
     {
-      description: "Modifies access permissions. Transitioning to 'private' automatically generates a new secure token.",
+      description:
+        "Modifies access permissions. The existing token is preserved across toggles — only a fresh package (no token yet) gets one on going private. Use renew_token to explicitly rotate a token that has leaked.",
       inputSchema: {
         package_id: z.string().min(1).describe('Package ID'),
         visibility: z.enum(['public', 'private']).describe('New visibility'),
@@ -337,6 +339,42 @@ export function registerTools(server: McpServer): void {
       }
       return {
         content: [{ type: 'text', text: JSON.stringify({ deleted: true, id: package_id }) }],
+      }
+    },
+  )
+
+  // renew_token
+  server.registerTool(
+    'renew_token',
+    {
+      description:
+        'Rotates the secure_token of a private package. Anyone holding the previous token loses access. Updates tokenGeneratedAt. Package must be private.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+      },
+    },
+    async ({ package_id }) => {
+      let meta
+      try {
+        meta = await renewPackageToken(package_id)
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }],
+          isError: true,
+        }
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              id: meta.id,
+              url: packageUrl(meta.id, meta.secure_token),
+              secure_token: meta.secure_token,
+              token_generated_at: meta.tokenGeneratedAt,
+            }),
+          },
+        ],
       }
     },
   )

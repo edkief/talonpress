@@ -68,7 +68,8 @@ The underlying MCP client is created lazily and cached per `url`+`headers`; on a
 | `talonpress_publish`            | Publish or update a static web package by uploading files from a folder.|
 | `talonpress_list_packages`      | List packages with visibility and access URLs.                          |
 | `talonpress_get_package_status` | Fetch live status, routes, file manifest, and active tokens.            |
-| `talonpress_update_visibility`  | Change package visibility (→ private mints a new secure token).         |
+| `talonpress_update_visibility`  | Change package visibility (existing token is preserved across toggles). |
+| `talonpress_renew_token`        | Rotate the secure_token of a private package (use when a token has leaked). |
 | `talonpress_delete_package`     | Permanently delete a package and purge its files.                       |
 
 ### `talonpress_publish`

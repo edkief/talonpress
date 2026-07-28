@@ -156,13 +156,14 @@ export async function publishPackage(
   )
   const now = new Date().toISOString()
   const secure_token = visibility === 'private' ? generateToken() : undefined
+  const tokenGeneratedAt = secure_token ? now : undefined
 
   const meta: PackageMeta = {
     id,
     name,
     slug,
     visibility,
-    ...(secure_token ? { secure_token } : {}),
+    ...(secure_token ? { secure_token, tokenGeneratedAt } : {}),
     defaultPage: effectivePage,
     hash,
     files: filePaths,
@@ -251,20 +252,47 @@ export async function updateVisibility(
   if (!meta) throw new Error(`Package not found: ${id}`)
 
   const now = new Date().toISOString()
-  const secure_token = visibility === 'private' ? generateToken() : undefined
+  // Preserve the existing token across toggles — only generate a new one if
+  // the package has no token yet (i.e. it was public and never had one). Use
+  // renewPackageToken for explicit rotation when a token has leaked.
+  let secure_token = meta.secure_token
+  let tokenGeneratedAt = meta.tokenGeneratedAt
+  if (visibility === 'private' && !secure_token) {
+    secure_token = generateToken()
+    tokenGeneratedAt = now
+  }
 
   const updated: PackageMeta = {
     ...meta,
     visibility,
     secure_token,
+    tokenGeneratedAt,
     updatedAt: now,
-  }
-  if (visibility === 'public') {
-    delete updated.secure_token
   }
 
   await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
   await appendRegistryEvent({ ts: now, event: 'visibility', id, visibility, hash: meta.hash })
+
+  return updated
+}
+
+export async function renewPackageToken(id: string): Promise<PackageMeta> {
+  const meta = await getPackageMeta(id)
+  if (!meta) throw new Error(`Package not found: ${id}`)
+  if (meta.visibility !== 'private') {
+    throw new Error('Can only renew token for a private package')
+  }
+
+  const now = new Date().toISOString()
+  const updated: PackageMeta = {
+    ...meta,
+    secure_token: generateToken(),
+    tokenGeneratedAt: now,
+    updatedAt: now,
+  }
+
+  await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
+  await appendRegistryEvent({ ts: now, event: 'token_renew', id, hash: meta.hash })
 
   return updated
 }
@@ -510,12 +538,13 @@ export async function finalizePublishSession(
 
     const id = generateId(session.name!)
     const secure_token = session.visibility === 'private' ? generateToken() : undefined
+    const tokenGeneratedAt = secure_token ? now : undefined
     const meta: PackageMeta = {
       id,
       name: session.name!,
       slug: id,
       visibility: session.visibility!,
-      ...(secure_token ? { secure_token } : {}),
+      ...(secure_token ? { secure_token, tokenGeneratedAt } : {}),
       defaultPage: effectivePage,
       hash,
       files: allFiles,
