@@ -17,6 +17,7 @@ interface MetaResponse {
   sizeBytes?: number
   shareUrl: string
   canToggle: boolean
+  files: string[]
 }
 
 function buildShareUrl(meta: PackageMeta): string {
@@ -34,6 +35,7 @@ function buildResponse(meta: PackageMeta, canToggle: boolean): MetaResponse {
     sizeBytes: meta.sizeBytes,
     shareUrl: buildShareUrl(meta),
     canToggle,
+    files: meta.files ?? [],
   }
 }
 
