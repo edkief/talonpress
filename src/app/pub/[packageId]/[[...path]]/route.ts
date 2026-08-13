@@ -14,6 +14,9 @@ export async function GET(
   { params }: { params: Promise<{ packageId: string; path?: string[] }> },
 ): Promise<NextResponse> {
   const { packageId, path: pathSegments = [] } = await params
+  const cookieHeader = request.headers.get('cookie')
+  const { searchParams } = new URL(request.url)
+  const queryToken = searchParams.get('token')
 
   const meta = await getPackageMeta(packageId)
   if (!meta) {
@@ -25,15 +28,11 @@ export async function GET(
 
   let pkgSessionCookie: string | undefined
 
+  const hasValidToken = !!(queryToken && queryToken === meta.secure_token)
+  const hasValidSession = config.authEnabled && verifySession(cookieHeader)
+  const hasPackageSession = verifyPackageSession(cookieHeader, packageId)
+
   if (meta.visibility === 'private') {
-    const { searchParams } = new URL(request.url)
-    const queryToken = searchParams.get('token')
-    const cookieHeader = request.headers.get('cookie')
-
-    const hasValidToken = !!(queryToken && queryToken === meta.secure_token)
-    const hasValidSession = config.authEnabled && verifySession(cookieHeader)
-    const hasPackageSession = verifyPackageSession(cookieHeader, packageId)
-
     if (!hasValidToken && !hasValidSession && !hasPackageSession) {
       if (config.authEnabled) {
         const returnUrl = encodeURIComponent(request.url)
@@ -47,6 +46,14 @@ export async function GET(
       pkgSessionCookie = grantPackageSession(cookieHeader, packageId)
     }
   }
+
+  // The bubble is only useful for users who can interact with the package — admins
+  // (verifySession returns true for valid dashboard sessions, and also true for everyone
+  // when auth is disabled per the verifySession contract), or any authenticated viewer of
+  // a private package (token / package session). Anonymous viewers of public packages do
+  // not get the bubble.
+  const canToggle =
+    verifySession(cookieHeader) || (meta.visibility === 'private' && (hasValidToken || hasPackageSession))
 
   const defaultPage = meta.defaultPage ?? 'index.html'
 
@@ -75,7 +82,7 @@ export async function GET(
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, stat), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, stat, canToggle), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -96,14 +103,14 @@ export async function GET(
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, idxStat), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, idxStat, canToggle), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return withCookie(await serveFile(request, packageId, safePath, stat), pkgSessionCookie)
+  return withCookie(await serveFile(request, packageId, safePath, stat, canToggle), pkgSessionCookie)
 }
 
 function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
@@ -111,7 +118,7 @@ function withCookie(response: NextResponse, cookie: string | undefined): NextRes
   return response
 }
 
-async function serveFile(request: NextRequest, packageId: string, filePath: string, stat: fs.Stats): Promise<NextResponse> {
+async function serveFile(request: NextRequest, packageId: string, filePath: string, stat: fs.Stats, canToggle: boolean): Promise<NextResponse> {
   const ext = path.extname(filePath).slice(1).toLowerCase()
 
   if (ext === 'md') {
@@ -128,7 +135,8 @@ async function serveFile(request: NextRequest, packageId: string, filePath: stri
     }
     const title = path.basename(filePath, '.md')
     const rendered = renderMarkdown(source, title)
-    return new NextResponse(injectBubble(rendered, bubbleOptions(packageId)), {
+    const body = canToggle ? injectBubble(rendered, bubbleOptions(packageId)) : rendered
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
@@ -139,7 +147,8 @@ async function serveFile(request: NextRequest, packageId: string, filePath: stri
 
   if (ext === 'html' || ext === 'htm') {
     const source = await fs.promises.readFile(filePath, 'utf8')
-    return new NextResponse(injectBubble(source, bubbleOptions(packageId)), {
+    const body = canToggle ? injectBubble(source, bubbleOptions(packageId)) : source
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
