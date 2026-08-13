@@ -47,13 +47,10 @@ export async function GET(
     }
   }
 
-  // The bubble is only useful for users who can interact with the package — admins
-  // (verifySession returns true for valid dashboard sessions, and also true for everyone
-  // when auth is disabled per the verifySession contract), or any authenticated viewer of
-  // a private package (token / package session). Anonymous viewers of public packages do
-  // not get the bubble.
-  const canToggle =
-    verifySession(cookieHeader) || (meta.visibility === 'private' && (hasValidToken || hasPackageSession))
+  // The bubble is only useful for users who can interact with the package — admins with a
+  // valid dashboard session, or any authenticated viewer of a private package (token /
+  // package session). Anonymous viewers of public packages do not get the bubble.
+  const canToggle = hasValidSession || (meta.visibility === 'private' && (hasValidToken || hasPackageSession))
 
   const defaultPage = meta.defaultPage ?? 'index.html'
 
