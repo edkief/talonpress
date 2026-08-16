@@ -211,6 +211,25 @@ describe('injectBubble', () => {
       expect(fnBody.trimEnd().endsWith('return null;')).toBe(true)
     })
 
+    // The two bubbles are one widget to the reader, so the cross takes both. A
+    // dismissed package bubble next to a live chat bubble just looks broken.
+    it('dismisses the whole assistant, not the bubble the cross sits on', () => {
+      const script = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+      const fn = region(script, 'function setDismissed', 'function flash')
+
+      expect(fn).toContain('document.getElementById(ROOT_ID)')
+      expect(fn).toContain("root.style.display=v?'none':''")
+      // Not the old bubble-only hide.
+      expect(fn).not.toContain('bubble.style.display')
+      // Everything open goes with it, chat included — an open EventSource would
+      // otherwise outlive the widget the reader just dismissed.
+      expect(fn).toContain('setChatOpen(false)')
+      expect(fn).toContain('setExpanded(false)')
+      expect(fn).toContain('closeBrowse()')
+      // Reload brings it back, so the button does not promise otherwise.
+      expect(script).toContain("'title':'Hide until you reload'")
+    })
+
     // A long answer does not fit a bubble-sized panel, so the reader can grow it.
     describe('the maximise toggle', () => {
       const body = () => scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))

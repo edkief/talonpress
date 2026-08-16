@@ -228,7 +228,18 @@ function lockSvg(){return svg('<rect x="4" y="11" width="16" height="10" rx="2"/
 function globeSvg(){return svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/>',14);}
 function fileSvg(){return svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8"/><path d="M8 17h6"/>',14);}
 function setExpanded(v){expanded=v;if(panel)panel.hidden=!v;if(bubble)bubble.setAttribute('aria-expanded',String(v));}
-function setDismissed(v){dismissed=v;if(bubble)bubble.style.display=v?'none':'';}
+/* The cross dismisses the whole assistant, not just the bubble it sits on: leaving a
+   chat bubble floating beside a dismissed package bubble reads as a half-broken
+   widget, and the two are one feature to the reader. Everything open goes with it —
+   including the chat, so its EventSource is not left holding a connection to an
+   origin the reader has just said they are done with. It comes back on reload, which
+   is why the button says so rather than claiming to be permanent. */
+function setDismissed(v){
+dismissed=v;
+if(v){setExpanded(false);setChatOpen(false);closeBrowse();}
+var root=document.getElementById(ROOT_ID);
+if(root)root.style.display=v?'none':'';
+}
 function flash(btn,text,klass,ms){
 var orig=btn.__azPbOrig||btn.textContent;
 btn.__azPbOrig=orig;
@@ -902,7 +913,7 @@ mountChat(root);
 var slot=el('div',{class:'az-pb-slot'});
 bubble=el('button',{class:'az-pb-bubble',type:'button',attrs:{'aria-label':'Package info','aria-expanded':'false'},onClick:function(e){if(e.target===closeBtn)return;setExpanded(!expanded);if(bubble)bubble.setAttribute('aria-expanded',String(expanded));}});
 bubble.appendChild(packageSvg());
-closeBtn=el('button',{class:'az-pb-bubble__close',type:'button',attrs:{'aria-label':'Dismiss'},html:'&times;'});
+closeBtn=el('button',{class:'az-pb-bubble__close',type:'button',attrs:{'aria-label':'Hide the assistant','title':'Hide until you reload'},html:'&times;'});
 closeBtn.addEventListener('click',function(e){e.stopPropagation();setDismissed(true);});
 bubble.appendChild(closeBtn);
 slot.appendChild(bubble);
