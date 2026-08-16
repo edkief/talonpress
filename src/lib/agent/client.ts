@@ -77,12 +77,18 @@ function describeFailure(err: unknown): { error: string; cause?: string } {
 /**
  * The one thing worth keeping out of a failed response body: whatever error string it
  * carries. Successful bodies hold conversation content and are never touched.
+ *
+ * Both halves are kept, because OpenTalon answers `{ error, message }` where `error`
+ * is a coarse code and `message` is the part that actually identifies the problem —
+ * a bare `forbidden` does not distinguish a role gate from a missing field.
  */
 function upstreamHint(body: unknown): string | undefined {
   if (!body || typeof body !== 'object') return undefined
   const record = body as Record<string, unknown>
-  const hint = record.error ?? record.message ?? record.code
-  return typeof hint === 'string' ? hint.slice(0, 200) : undefined
+  const parts = [record.error ?? record.code, record.message]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+  if (parts.length === 0) return undefined
+  return [...new Set(parts)].join(': ').slice(0, 300)
 }
 
 /** A reader closing the tab aborts the relay's signal. Normal, and not worth a line. */

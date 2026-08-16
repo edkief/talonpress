@@ -547,6 +547,17 @@ describe('agent proxy routes', () => {
       expect(logged()).toContain('unknown embed client')
     })
 
+    // OpenTalon answers { error, message } where the code is coarse and the message is
+    // the diagnosis. Logging only the code turns every rejection into "forbidden".
+    it('keeps the upstream message, not just its error code', async () => {
+      const pkg = await seedPackage()
+      agentResponds({ error: 'forbidden', message: 'Actor holds none of the permitted roles (admin)' }, 403)
+
+      await callRoute('session', pkg.id, { body: {} })
+      expect(logged()).toContain('forbidden')
+      expect(logged()).toContain('permitted roles (admin)')
+    })
+
     // The credential and the stream token are the two things that must never reach a
     // log aggregator. The token rides in the query string of the very paths that fail.
     it('never logs the shared secret or a stream token', async () => {
