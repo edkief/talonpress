@@ -505,9 +505,11 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   color: var(--fg3);
   text-align: center;
 }
+/* Fixed 2x2: with exactly four cards, auto-fit lands on three columns at wide
+   viewports and orphans the fourth. */
 .az-hero-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.875rem;
 }
 .az-hero-card {
@@ -572,6 +574,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   .az-hero { gap: 2.25rem; }
   .az-hero-title { font-size: 2rem; }
   .az-hero-tagline { font-size: 1rem; }
+  .az-hero-cards { grid-template-columns: 1fr; }
 }
 
 .az-auth-bg {
