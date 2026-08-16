@@ -44,10 +44,23 @@ describe('auth/session', () => {
     expect(verifySession('')).toBe(false)
   })
 
-  it('allows all requests when auth is disabled', async () => {
+  // The "no auth configured means open" rule lives in getAccess() now, so that an
+  // authz-proxy-only deployment isn't waved through by the absent shared secret.
+  it('rejects sessions when no shared secret is configured', async () => {
     delete process.env.TALONPRESS_SHARED_SECRET
     const { verifySession } = await import('../src/lib/auth/session')
-    expect(verifySession(null)).toBe(true)
+    expect(verifySession(null)).toBe(false)
+  })
+
+  it('does not accept cookies signed with an empty secret', async () => {
+    const { createSessionCookie } = await import('../src/lib/auth/session')
+    const cookieHeader = createSessionCookie()
+    const value = cookieHeader.match(/tp_session=([^;]+)/)![1]
+
+    vi.resetModules()
+    delete process.env.TALONPRESS_SHARED_SECRET
+    const { verifySession } = await import('../src/lib/auth/session')
+    expect(verifySession(`tp_session=${value}`)).toBe(false)
   })
 })
 

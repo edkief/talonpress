@@ -4,7 +4,8 @@ import path from 'path'
 import { getPackageMeta } from '@/lib/storage/deployments'
 import { resolveSafeFilePath } from '@/lib/storage/paths'
 import { getContentType } from '@/lib/security'
-import { verifySession, verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
+import { verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
+import { getAccess } from '@/lib/auth/access'
 import { config } from '@/lib/config'
 import { renderMarkdown } from '@/lib/markdown'
 import { injectBubble } from '@/lib/pubBubble/inject'
@@ -29,12 +30,16 @@ export async function GET(
   let pkgSessionCookie: string | undefined
 
   const hasValidToken = !!(queryToken && queryToken === meta.secure_token)
-  const hasValidSession = config.authEnabled && verifySession(cookieHeader)
+  // A management identity — authz-proxy admin or a shared-secret session. `/pub` is
+  // outside the proxy-protected prefixes, so anonymous viewers land here with none.
+  const access = await getAccess(request)
+  const hasValidSession = config.authEnabled && access.isAdmin
   const hasPackageSession = verifyPackageSession(cookieHeader, packageId)
 
   if (meta.visibility === 'private') {
     if (!hasValidToken && !hasValidSession && !hasPackageSession) {
-      if (config.authEnabled) {
+      // Only the shared-secret flow gives an anonymous viewer somewhere to sign in.
+      if (config.sharedSecretEnabled) {
         const returnUrl = encodeURIComponent(request.url)
         return NextResponse.redirect(new URL(`/auth?return=${returnUrl}`, request.url))
       }

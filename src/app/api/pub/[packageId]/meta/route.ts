@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPackageMeta, updateVisibility } from '@/lib/storage/deployments'
-import { verifySession, verifyPackageSession } from '@/lib/auth/session'
+import { verifyPackageSession } from '@/lib/auth/session'
+import { getAccess } from '@/lib/auth/access'
 import { config } from '@/lib/config'
 import { packageAccessUrl } from '@/lib/storage/urls'
 import type { PackageMeta, Visibility } from '@/lib/storage/types'
@@ -39,12 +40,16 @@ function buildResponse(meta: PackageMeta, canToggle: boolean): MetaResponse {
   }
 }
 
-function authorize(
+async function authorize(
   meta: PackageMeta,
-  cookieHeader: string | null,
+  request: NextRequest,
   queryToken: string | null,
-): { dashboardSession: boolean; packageToken: boolean; packageSession: boolean; authorized: boolean } {
-  const dashboardSession = config.authEnabled && verifySession(cookieHeader)
+): Promise<{ dashboardSession: boolean; packageToken: boolean; packageSession: boolean; authorized: boolean }> {
+  const cookieHeader = request.headers.get('cookie')
+  // "Dashboard session" now means any management identity: an authz-proxy user
+  // holding the admin role, or the legacy shared-secret cookie.
+  const access = await getAccess(request)
+  const dashboardSession = config.authEnabled && access.isAdmin
   const packageToken = !!(queryToken && meta.secure_token && queryToken === meta.secure_token)
   const packageSession = verifyPackageSession(cookieHeader, meta.id)
   const authorized = dashboardSession || packageToken || packageSession
@@ -80,10 +85,9 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const cookieHeader = request.headers.get('cookie')
   const { searchParams } = new URL(request.url)
   const queryToken = searchParams.get('token')
-  const auth = authorize(meta, cookieHeader, queryToken)
+  const auth = await authorize(meta, request, queryToken)
 
   if (meta.visibility === 'private' && !auth.authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -106,10 +110,9 @@ export async function POST(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const cookieHeader = request.headers.get('cookie')
   const { searchParams } = new URL(request.url)
   const queryToken = searchParams.get('token')
-  const auth = authorize(meta, cookieHeader, queryToken)
+  const auth = await authorize(meta, request, queryToken)
 
   if (!canToggleFor(meta, auth)) {
     return NextResponse.json({ error: 'Not authorized to toggle visibility' }, { status: 403 })

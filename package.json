@@ -11,6 +11,7 @@
     "test:watch": "node --max-old-space-size=512 ./node_modules/.bin/vitest"
   },
   "dependencies": {
+    "@authz-proxy/sdk": "^0.6.0",
     "@modelcontextprotocol/sdk": "1.26.0",
     "fflate": "^0.8.3",
     "marked": "^18.0.5",
@@ -22,7 +23,6 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
-    "@types/marked": "^6.0.0",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.2",

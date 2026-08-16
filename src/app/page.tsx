@@ -107,7 +107,7 @@ export default async function DashboardPage() {
               <div>
                 <div className="az-banner__title">Authentication disabled</div>
                 <div className="az-banner__body">
-                  <code>TALONPRESS_SHARED_SECRET</code> is not set. The MCP API and dashboard are open to unauthenticated requests. Set the variable and restart the server to enable access control.
+                  Neither <code>TALONPRESS_SHARED_SECRET</code> nor <code>AUTHZ_PROXY_URL</code> is set. The MCP API and dashboard are open to unauthenticated requests. Set one and restart the server to enable access control.
                 </div>
               </div>
             </div>

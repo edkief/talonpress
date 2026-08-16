@@ -1,7 +1,24 @@
 import { Suspense } from 'react'
 import AuthForm from './AuthForm'
+import { config } from '@/lib/config'
 
 export default function AuthPage() {
+  // With authz-proxy as the only mechanism there is no token to type — sign-in
+  // happens upstream, before the request ever reaches TalonPress.
+  if (!config.sharedSecretEnabled && config.authzEnabled) {
+    return (
+      <div className="az-auth-bg">
+        <div className="az-auth-card">
+          <h1 className="az-auth-title">TalonPress</h1>
+          <p className="az-auth-subtitle">
+            Sign-in is handled by authz-proxy. If you are seeing this page, your session
+            did not reach TalonPress — reload the dashboard to re-authenticate upstream.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="az-auth-bg">
       <div className="az-auth-card">

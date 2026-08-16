@@ -101,20 +101,71 @@ TALONPRESS_SHARED_SECRET=your_high_entropy_mcp_token_here
 AUTH_SESSION_TTL=3600          # Dashboard auth session cookie lifetime in seconds (default: 3600)
 PUBLIC_BASE_URL=https://your.domain.com  # Used to construct package URLs and set the Secure cookie flag
 
-# Suppress the startup warning when TALONPRESS_SHARED_SECRET is not set
+# authz-proxy (reverse proxy mode) — see "Authentication Behaviour" below
+AUTHZ_PROXY_URL=https://authz-proxy.example.com
+TALONPRESS_ADMIN_ROLE=talonpress-admin   # External role granting management access
+AUTHZ_ROLE_SOURCE=jwt                    # 'jwt' (verify) | 'header' (trust proxy headers)
+TALONPRESS_MCP_AUTH=inherit              # 'inherit' | 'none' (opt /api/mcp out of the gate)
+
+# Suppress the startup warning when no auth mechanism is configured
 TALONPRESS_DISABLE_AUTH_WARNING=true
 ```
 
 ### Authentication Behaviour
 
-When `TALONPRESS_SHARED_SECRET` is set, TalonPress enforces HMAC-signed session cookies on all protected routes:
+TalonPress supports two complementary mechanisms. They are OR-ed — whichever recognises the caller wins — and the app is only fully open when **neither** is configured.
+
+#### 1. authz-proxy (`AUTHZ_PROXY_URL`) — human identity
+
+TalonPress runs *behind* [authz-proxy](https://npm.kieffer.me/-/web/detail/@authz-proxy/sdk) in reverse proxy mode. The proxy authenticates the user and forwards the request with `X-Auth-Request-*` headers, including a signed RS256 JWT in `X-Auth-Request-JWT`. [`@authz-proxy/sdk`](https://npm.kieffer.me/-/web/detail/@authz-proxy/sdk) verifies that token locally against the proxy's JWKS, giving TalonPress the user's **display name** and **external role list**. The proxy must run with `JWT_ASYMMETRIC_SIGNING=true`.
+
+| Outcome | Condition |
+| --- | --- |
+| Full management access | User holds `TALONPRESS_ADMIN_ROLE` (default `talonpress-admin`) |
+| `403 Forbidden` | Authenticated upstream but missing that role — the response names the role required |
+| `401 Unauthorized` | No identity forwarded (and no shared secret configured) |
+
+The signed-in user's name and roles are shown in the dashboard sidebar. Only `X-Auth-Request-JWT` is consulted as a token source, so a `Bearer <shared secret>` header can never shadow the proxy identity. If the proxy or its JWKS is unreachable, TalonPress degrades to "no authz identity" rather than failing the request — the shared secret remains a way in.
+
+Set `AUTHZ_ROLE_SOURCE=header` to skip JWT verification and trust `X-Auth-Request-Email` / `X-Auth-Request-Role-List` directly. This needs no JWKS, but is **only safe when the proxy is the sole ingress** and strips client-supplied copies of those headers; it also carries no display name, only the email.
+
+#### 2. `TALONPRESS_SHARED_SECRET` — machine credential
+
+MCP clients and CLI automation cannot complete an interactive sign-in, so the shared secret remains a full-access credential, sent as `Authorization: Bearer <secret>`. It also backs the `/auth` login page and the HMAC-signed session cookies:
 
 | Cookie | Scope | Purpose |
 | --- | --- | --- |
-| `tp_session` | `/` | MCP API session. Issued by the login endpoint after the shared secret is verified. |
+| `tp_session` | `/` | Dashboard session. Issued by the login endpoint after the shared secret is verified. |
 | `tp_pkg_session` | `/pub` | Per-package access for private packages. Carries a map of `packageId → expiry` timestamps. |
 
 On the first visit to a private package URL with a valid `?token=` query parameter, TalonPress promotes the token to a `tp_pkg_session` cookie so subsequent requests in the same browser session no longer need to pass the token in the URL.
+
+#### 3. `TALONPRESS_MCP_AUTH` — opting the MCP transport out
+
+In a typical cluster deployment the two classes of traffic arrive by different routes: browsers come through the public hostname ingress (authz-proxy-protected), while MCP clients reach the pod over an internal Kubernetes Service — carrying no proxy headers and no shared secret. Because `/api/mcp` otherwise inherits the app-wide gate, enabling authz-proxy would start returning `401` to those in-cluster callers.
+
+`TALONPRESS_MCP_AUTH=none` opts the MCP transport out of the gate, and only that transport. The dashboard, `/api/packages/cleanup`, and every other route stay gated exactly as before.
+
+| Value | Effect on `/api/mcp` |
+| --- | --- |
+| `inherit` (default) | Gated by whatever auth is configured — shared secret and/or authz-proxy admin role. |
+| `none` | Accepts unauthenticated requests. Announced at startup with a warning log. |
+
+**The precondition:** `none` assumes every non-cluster route to the pod terminates at authz-proxy first. In this deployment the public hostname ingress is authz-proxy-protected, so MCP is properly gated externally. The residual exposure is lateral — anything that can reach the pod's port from inside the cluster can publish and delete packages — which is a NetworkPolicy question rather than an application one.
+
+That assumption is load-bearing. If a second ingress is added, or someone runs `kubectl port-forward` to the pod, `/api/mcp` becomes an unauthenticated write path. Confirm too that authz-proxy's route matching actually covers `/api/mcp` and does not exclude `/api/*` on the assumption that the application authenticates its own API routes — with `none` set, it does not.
+
+#### Choosing a combination
+
+| `AUTHZ_PROXY_URL` | `TALONPRESS_SHARED_SECRET` | Result |
+| --- | --- | --- |
+| ✓ | ✓ | **Recommended.** Humans get named, role-checked access; MCP/CLI keep a bearer credential. |
+| ✓ | — | Fully proxy-governed. MCP clients must also route through the proxy and hold the admin role. |
+| — | ✓ | Legacy behaviour: one shared token for everyone, no identity. |
+| — | — | No access control. The dashboard shows a warning banner. |
+
+> [!NOTE]
+> When only authz-proxy is configured there is no shared secret to sign cookies with, so `tp_pkg_session` is signed with a random per-process key. Package sessions therefore reset on restart; a `?token=` link re-grants them immediately.
 
 ---
 
@@ -266,6 +317,7 @@ kubectl apply -k k8s/
 > [!WARNING]
 > * **Token Leakage:** Passing security tokens via query parameters (`?token=...`) makes distribution simple for agents, but means tokens can appear in browser histories or server access logs. TalonPress mitigates this by promoting a valid token to an `HttpOnly` session cookie on first use, but ensure your environment strips query strings from access logs for private package endpoints.
 > * **Session Secret:** All session and package cookies are HMAC-signed with `TALONPRESS_SHARED_SECRET`. Rotate this secret to immediately invalidate all active sessions. Set `PUBLIC_BASE_URL` to an `https://` URL in production so the `Secure` cookie flag is applied.
+> * **Header Trust:** `AUTHZ_ROLE_SOURCE=header` makes TalonPress believe `X-Auth-Request-Email` and `X-Auth-Request-Role-List` without verification. Anyone able to reach TalonPress directly could then forge an admin identity. Use it only when the proxy is the sole ingress (e.g. a Kubernetes `ClusterIP` Service unreachable from outside) and strips those headers from client requests; otherwise leave `AUTHZ_ROLE_SOURCE=jwt`.
 > * **Sandboxing:** Because this application serves arbitrary HTML/JS provided by autonomous agents, ensure that the serving domain is isolated or sandboxed (e.g., utilizing unique subdomains or rigid Content Security Policies) to prevent Cross-Site Scripting (XSS) risks to the parent OpenTalon management console.
 
 ```

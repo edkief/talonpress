@@ -5,6 +5,22 @@ const COOKIE_NAME = 'tp_session'
 const PKG_COOKIE_NAME = 'tp_pkg_session'
 const SEPARATOR = '.'
 
+let ephemeralKey: string | null = null
+
+/**
+ * Key used to HMAC our own cookies. Normally the shared secret, so cookies survive
+ * restarts and can be invalidated by rotating it. When only authz-proxy auth is
+ * configured there is no shared secret, and an empty HMAC key would make the
+ * per-package cookies trivially forgeable — so fall back to a random per-process
+ * key (package sessions then reset on restart, which is harmless: the `?token=`
+ * query parameter re-grants them).
+ */
+function signingKey(): string {
+  if (config.sharedSecret) return config.sharedSecret
+  if (!ephemeralKey) ephemeralKey = crypto.randomBytes(32).toString('hex')
+  return ephemeralKey
+}
+
 function sign(payload: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(payload).digest('base64url')
 }
@@ -23,7 +39,7 @@ function verifySignedData(raw: string): string | null {
   if (lastDot === -1) return null
   const data = raw.slice(0, lastDot)
   const sig = raw.slice(lastDot + 1)
-  const expected = sign(data, config.sharedSecret)
+  const expected = sign(data, signingKey())
   try {
     const aBuf = Buffer.from(sig)
     const bBuf = Buffer.from(expected)
@@ -48,7 +64,7 @@ export function createSessionCookie(value: string = '1'): string {
     exp: Math.floor(Date.now() / 1000) + config.authSessionTtl,
   }
   const data = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const sig = sign(data, config.sharedSecret)
+  const sig = sign(data, signingKey())
   const cookieValue = `${data}${SEPARATOR}${sig}`
 
   const flags = [
@@ -66,8 +82,14 @@ export function createSessionCookie(value: string = '1'): string {
   return flags.join('; ')
 }
 
+/**
+ * True only when the request carries a live `tp_session` cookie signed with the
+ * shared secret. Unlike earlier versions this does *not* return true when auth is
+ * unconfigured — "no auth configured means open" is decided by `getAccess()`, so
+ * that an authz-proxy-only deployment can't be waved through by an absent secret.
+ */
 export function verifySession(cookieHeader: string | null): boolean {
-  if (!config.authEnabled) return true
+  if (!config.sharedSecretEnabled) return false
   if (!cookieHeader) return false
 
   const raw = parseCookies(cookieHeader)[COOKIE_NAME]
@@ -119,7 +141,7 @@ export function grantPackageSession(cookieHeader: string | null, packageId: stri
   const maxAge = Math.max(...Object.values(packages)) - now
   const payload: PackageSessionPayload = { packages }
   const data = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const cookieValue = `${data}${SEPARATOR}${sign(data, config.sharedSecret)}`
+  const cookieValue = `${data}${SEPARATOR}${sign(data, signingKey())}`
 
   const flags = [
     `${PKG_COOKIE_NAME}=${cookieValue}`,

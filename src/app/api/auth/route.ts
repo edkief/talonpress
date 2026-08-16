@@ -4,8 +4,10 @@ import { createSessionCookie } from '@/lib/auth/session'
 import { config } from '@/lib/config'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!config.authEnabled) {
-    return NextResponse.json({ error: 'Auth is not enabled' }, { status: 400 })
+  // Shared-secret login only. authz-proxy deployments authenticate upstream and
+  // never reach this endpoint.
+  if (!config.sharedSecretEnabled) {
+    return NextResponse.json({ error: 'Shared-secret login is not enabled' }, { status: 400 })
   }
 
   let token: string

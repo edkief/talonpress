@@ -115,6 +115,41 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   border-top: 1px solid var(--border);
   margin-top: auto;
 }
+/* Signed-in identity forwarded by authz-proxy */
+.az-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+  min-width: 0;
+}
+.az-sidebar-user-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--indigo-600, #4f46e5);
+  color: #fff;
+}
+.az-sidebar-user-body {
+  min-width: 0;
+}
+.az-sidebar-user-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.az-sidebar-user-roles {
+  font-size: 0.6875rem;
+  color: var(--fg3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .az-nav {
   flex: 1;
   overflow-y: auto;

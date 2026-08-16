@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteOldPackages } from '@/lib/storage/deployments'
-import { verifySession } from '@/lib/auth/session'
-import { timingSafeCompare } from '@/lib/auth/secret'
-import { config } from '@/lib/config'
+import { getAccess } from '@/lib/auth/access'
 
 const DEFAULT_MAX_AGE_DAYS = 30
 
-// Authorize via either a dashboard session cookie (UI button) or a
-// `Bearer <shared secret>` header (CLI / automation). Mirrors the auth used by
-// the MCP transport and the dashboard. When auth is disabled, allow all.
-function isAuthorized(request: NextRequest): boolean {
-  if (!config.authEnabled) return true
-  if (verifySession(request.headers.get('cookie'))) return true
-  const authHeader = request.headers.get('authorization') ?? ''
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-  return timingSafeCompare(token, config.sharedSecret)
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Destructive, so admin only: an authz-proxy user holding TALONPRESS_ADMIN_ROLE,
+  // a dashboard session cookie (UI button), or `Bearer <shared secret>` (CLI).
+  const access = await getAccess(request)
+  if (!access.isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: access.authenticated ? 403 : 401 })
   }
 
   // Accept the threshold from a JSON body or the `days` query param; fall back
