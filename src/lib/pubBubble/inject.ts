@@ -348,7 +348,7 @@ if(expanded)setExpanded(false);
 /* ── Agent chat ─────────────────────────────────────────────────────────── */
 var IDENTITY_KEY='tp_agent_identity';
 var IDENTITY_RE=/^[a-z0-9][a-z0-9._-]{1,31}$/;
-var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatInput=null,chatSendBtn=null,chatForm=null;
+var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatStatusText=null,chatInput=null,chatSendBtn=null,chatForm=null;
 var chatOpen=false,chatBooted=false,chatSending=false;
 var chatCursor=0,chatSeen=Object.create(null),chatEmpty=null;
 var es=null,esFailures=0,esRetry=null,pollTimer=null,thinkWatchdog=null;
@@ -414,12 +414,31 @@ chatLog.scrollTop=chatLog.scrollHeight;
 if(key)chatSeen[key]=node;
 return node;
 }
-function setThinking(on){
+/* There is no terminal status by design: "done" fires per step, not per turn, so
+   treating it as idle would flicker the indicator between steps. The indicator is
+   cleared by the turn's output instead: any message, error included.
+
+   The watchdog therefore covers exactly one case, the server dying mid-turn, which
+   is the only path that writes no outbox row at all. It is re-armed on every call,
+   so a turn making steady progress keeps pushing it back and only true silence
+   trips it. */
+function setThinking(on,label){
 if(!chatStatus)return;
+if(on&&label&&chatStatusText)chatStatusText.textContent=label;
 chatStatus.hidden=!on;
 if(thinkWatchdog){clearTimeout(thinkWatchdog);thinkWatchdog=null;}
-/* A dropped terminal status must not leave the indicator spinning forever. */
 if(on)thinkWatchdog=setTimeout(function(){if(chatStatus)chatStatus.hidden=true;},60000);
+}
+
+/* Build our own label from the machine-readable fields: the upstream "status"
+   string is a convenience label, not a stable contract. An unrecognised kind still
+   means the turn is running, so keep whatever the indicator already says. */
+function statusLabel(d){
+if(!d)return null;
+if(d.kind==='tool')return 'Running '+(String(d.tool||'a tool').slice(0,40))+'\\u2026';
+if(d.kind==='responding')return 'Writing a reply\\u2026';
+if(d.kind==='thinking')return 'Thinking\\u2026';
+return null;
 }
 
 /* Messages can arrive twice: reconnecting replays everything past the cursor. Key
@@ -428,10 +447,13 @@ function ingest(msg){
 if(!msg)return;
 var key=msg.id||msg.messageId||msg.clientMessageId;
 if(key&&chatSeen[key])return;
-var role=msg.role==='user'?'user':'agent';
+/* A failed turn arrives here rather than on the SSE error event — the failure is
+   written to the durable outbox like any other output — so it is styled as an
+   error, and it clears the indicator exactly like a successful reply. */
+var role=msg.role==='user'?'user':(msg.kind==='error'?'error':'agent');
 addMessage(role,msg.text||msg.content||'',key);
 if(typeof msg.seq==='number'&&msg.seq>chatCursor)chatCursor=msg.seq;
-if(role==='agent')setThinking(false);
+if(role!=='user')setThinking(false);
 }
 
 function closeStream(){
@@ -460,14 +482,16 @@ es.addEventListener('message',function(ev){
 esFailures=0;
 try{ingest(JSON.parse(ev.data));}catch(e){}
 });
-es.addEventListener('status',function(){
-/* The status payload is coarse and its vocabulary may grow, so anything not
-   recognised is treated as "still working" and cleared by the next message. */
-setThinking(true);
+es.addEventListener('status',function(ev){
+esFailures=0;
+var label=null;
+try{label=statusLabel(JSON.parse(ev.data));}catch(e){}
+setThinking(true,label);
 });
+/* Stream-level only — replay failed. A failed *turn* is a message event, handled
+   in ingest(); this one says nothing about whether the turn is still running. */
 es.addEventListener('error',function(ev){
 try{var d=JSON.parse(ev.data);addMessage('error',d.error||'The agent reported an error.');}catch(e){}
-setThinking(false);
 });
 es.onerror=function(){
 /* Own the reconnect: EventSource would retry by itself, but with the cursor
@@ -513,7 +537,9 @@ chatSending=true;chatSendBtn.disabled=true;
 chatInput.value='';chatInput.style.height='';
 var cid='m-'+Date.now()+'-'+Math.random().toString(16).slice(2,8);
 addMessage('user',text,cid);
-setThinking(true);
+/* Reset the label rather than inheriting the last turn's — the previous one may
+   have ended on "Running web_search". */
+setThinking(true,'Thinking\\u2026');
 try{
 var res=await chatPost('/message',{message:text,clientMessageId:cid});
 if(!res.ok){
@@ -600,9 +626,10 @@ chatLog=el('div',{class:'az-pb-chat__log',attrs:{role:'log','aria-live':'polite'
 chatPanel.appendChild(chatLog);
 renderChatEmpty();
 
+chatStatusText=el('span',{text:'Thinking\\u2026'});
 chatStatus=el('div',{class:'az-pb-chat__status',hidden:true},[
 el('span',{class:'az-pb-chat__dots'},[el('i'),el('i'),el('i')]),
-document.createTextNode('Thinking\\u2026'),
+chatStatusText,
 ]);
 chatPanel.appendChild(chatStatus);
 

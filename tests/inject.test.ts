@@ -104,6 +104,44 @@ describe('injectBubble', () => {
       expect(out).toContain('"identity":"self-declared"')
     })
 
+    // A failed turn arrives as a message event with kind 'error', not on the SSE
+    // error event, because it is written to the durable outbox like any other
+    // output. Clearing the indicator only for kind 'message' would leave it
+    // spinning until the watchdog.
+    it('clears the thinking indicator for any message, including a failed turn', () => {
+      const body = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+      const ingest = body.slice(body.indexOf('function ingest'), body.indexOf('function closeStream'))
+
+      expect(ingest).toContain("msg.kind==='error'?'error':'agent'")
+      // Keyed on "not the user's own echo", so no message kind can miss it.
+      expect(ingest).toContain("if(role!=='user')setThinking(false)")
+      expect(ingest).not.toContain("if(role==='agent')setThinking(false)")
+    })
+
+    // There is no terminal or idle status by design — `done` fires per step, so
+    // mapping it to idle would flicker the indicator between steps.
+    it('never treats a status event as the end of a turn', () => {
+      const body = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+      const listener = body.slice(body.indexOf("addEventListener('status'"))
+      expect(listener.slice(0, listener.indexOf('});'))).not.toContain('setThinking(false)')
+    })
+
+    it('labels the indicator from kind and tool, not the prose status', () => {
+      const body = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+      const fn = body.slice(body.indexOf('function statusLabel'), body.indexOf('function ingest'))
+
+      expect(fn).toContain("d.kind==='tool'")
+      expect(fn).toContain("d.kind==='responding'")
+      expect(fn).toContain("d.kind==='thinking'")
+      // `status` is a convenience label upstream does not treat as a stable
+      // contract, so it must not be what we render.
+      expect(fn).not.toContain('d.status')
+      // An unrecognised kind means the turn is still running, so the fallback
+      // returns no label and leaves the indicator saying whatever it already said.
+      const fnBody = fn.slice(0, fn.indexOf('\n}'))
+      expect(fnBody.trimEnd().endsWith('return null;')).toBe(true)
+    })
+
     // Model output is rendered with textContent; an innerHTML on it would be an XSS
     // sink, since there is no CSP on served pages.
     it('never assigns model output through innerHTML', () => {
