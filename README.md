@@ -10,6 +10,7 @@ TalonPress is a lightweight, zero-dependency data publishing application built o
 * **Zero-Dependency Architecture:** No external databases, object storage, or key-value stores required. Runs entirely on the local file system.
 * **Query-Token Privacy:** Private packages are secured via unique, cryptographically secure tokens passed directly as query parameters, allowing seamless agent access and secure viewing without complex header injection.
 * **Streamlined Next.js Edge:** Built utilizing the Next.js App Router for high-performance static asset streaming via dynamic filesystem routing.
+* **Two-Way Agent Chat:** An optional chat bubble on served pages lets an admin talk to an OpenTalon agent about the package they are reading — closing the loop on what was previously a one-way publishing relationship. See [Agent Chat](#-agent-chat).
 
 ---
 
@@ -55,6 +56,10 @@ Agents can execute actions using these schema-defined tools:
 | `update_package` | `package_id` (string)<br>`files` (array of `{ path: string, content: string, encoding?: "utf8" \| "base64" }`)<br>`default_page` (optional string) | Modifies or appends specific files within an existing deployment. Overwrites matching paths, leaves others untouched, and updates the `updatedAt` timestamp and build hash. If `default_page` is provided it must exist in the resulting merged file set. |
 | `delete_package` | `package_id` (string) | Purges the deployment directory and marks the package as deleted in the registry log. |
 | `renew_token` | `package_id` (string) | Rotates the `secure_token` of a private package and updates `tokenGeneratedAt`. Anyone holding the previous token loses access. Package must be private. |
+| `set_package_context` | `package_id` (string)<br>`context` (optional object)<br>`clear` (optional boolean) | Sets what an agent should know about a package when a reader chats about it: `summary`, `outline`, `facts`, `excerpt`. Independent of publishing — corrects the agent's view without touching a file. Returns the resulting cache `version` and whether the size budget truncated anything. |
+| `get_package_context` | `package_id` (string) | Returns the stored context alongside the payload actually sent to the agent, which may be truncated or derived from the file list when nothing has been set. |
+
+`publish_package`, `begin_publish_session` and `finalize_publish_session` also accept an optional `context` with the same shape.
 
 ### 📂 Resources
 
@@ -270,7 +275,7 @@ const tools = getTalonpressTools({
 
 | Tool | Description |
 | --- | --- |
-| `talonpress_publish` | Publish or update a package by uploading selected files from a local folder. Omit `files` for a dry-run preview. Pass `package_id` to update an existing package. |
+| `talonpress_publish` | Publish or update a package by uploading selected files from a local folder. Omit `files` for a dry-run preview. Pass `package_id` to update an existing package. Optional `context` describes the package for [agent chat](#-agent-chat). |
 | `talonpress_list_packages` | List packages with optional `visibility` filter and `limit`. |
 | `talonpress_get_package_status` | Fetch full status, file manifest, and tokens for a package. |
 | `talonpress_update_visibility` | Change a package's visibility. The existing token is preserved across toggles. |
@@ -339,12 +344,83 @@ kubectl apply -k k8s/
 
 ---
 
+## 💬 Agent Chat
+
+TalonPress publishes packages *to* the world on an agent's behalf. Agent chat is the return
+path: a bubble on a served page that lets a privileged reader ask the agent about the package
+they are looking at — "where did this number come from?", "add a section about X".
+
+Off unless `TALONPRESS_AGENT_URL` and `TALONPRESS_AGENT_SECRET` are both set **and** some form
+of authentication is configured. With no auth, every anonymous caller resolves as an admin, so
+the chat stays disabled rather than trusting that.
+
+### How it fits together
+
+The browser never talks to OpenTalon. It calls TalonPress with its ordinary session cookie;
+TalonPress calls OpenTalon's embed channel with the shared secret and asserts who the user is.
+OpenTalon needs no CORS, is never browser-facing, and its secret never leaves the server.
+
+```
+browser ──cookie──▶ /api/pub/<id>/agent/* ──Bearer + X-Embed-Client──▶ OpenTalon /api/embed/*
+```
+
+Replies are asynchronous — an agent turn with tools outlives any sane request timeout — so
+`POST /message` returns `202` and the answer arrives over SSE on `/agent/stream`, with
+`/agent/messages` as a polling fallback for networks that eat server-sent events.
+
+### One conversation per package
+
+The conversation is keyed on the **package**, not the page. Moving from `page1.html` to
+`page2.html` keeps the same conversation and its history; the page you are on travels as
+context so the agent still knows exactly what you are reading. Keying on the page instead would
+start a fresh conversation on every click.
+
+### Page context
+
+What the agent knows about a package is authored over MCP with `set_package_context` (or the
+`context` parameter on the publish tools) — never by the browser, which would let one admin
+rewrite the prompt prefix every other reader of that package shares. A package with no context
+set gets a structural one derived from its file list, so the agent is never entirely blind.
+
+The rendered context is cached upstream as part of the system prompt, keyed on a version
+derived from its content. It is capped at `TALONPRESS_AGENT_MAX_CONTEXT_CHARS`; `set_package_context`
+tells you when the cap truncated something so you can shorten it deliberately.
+
+### Who can chat
+
+Admins only. A package `?token=` is enough to *read* a private package but not to drive an
+agent, so token holders get the package bubble without the chat one.
+
+> [!IMPORTANT]
+> **With shared-secret auth, name yourself at sign-in.** The shared secret is a single
+> credential, so without a name every holder shares one conversation — including its history,
+> which is replayed when the panel opens. The sign-in form offers an optional name, stored in
+> `localStorage`, that keeps colleagues' conversations apart. Anyone holding the secret can
+> claim any name: it separates people who are cooperating, it does not keep anyone out.
+> Deployments behind authz-proxy have a real verified subject and ignore all of this.
+
+### Deployment notes
+
+The SSE relay must not be buffered. TalonPress sends `X-Accel-Buffering: no` and
+`Cache-Control: no-cache, no-transform`, and `k8s/ingress.yaml` sets
+`nginx.ingress.kubernetes.io/proxy-buffering: "off"` with a raised `proxy-read-timeout`. If
+your reverse proxy buffers anyway, replies will arrive in one lump when the turn ends instead
+of streaming — use the polling fallback, or fix the proxy.
+
+Rate limiting is OpenTalon's (`rateLimitPerMinute` on its embed client). TalonPress relays its
+`429` and `Retry-After` rather than keeping a limiter of its own, which under multiple replicas
+would only ever be approximate.
+
+---
+
 ## 🔒 Security Considerations
 
 > [!WARNING]
 > * **Token Leakage:** Passing security tokens via query parameters (`?token=...`) makes distribution simple for agents, but means tokens can appear in browser histories or server access logs. TalonPress mitigates this by promoting a valid token to an `HttpOnly` session cookie on first use, but ensure your environment strips query strings from access logs for private package endpoints.
 > * **Session Secret:** All session and package cookies are HMAC-signed with `TALONPRESS_SHARED_SECRET`. Rotate this secret to immediately invalidate all active sessions. Set `PUBLIC_BASE_URL` to an `https://` URL in production so the `Secure` cookie flag is applied.
-> * **Header Trust:** `AUTHZ_ROLE_SOURCE=header` makes TalonPress believe `X-Auth-Request-Email` and `X-Auth-Request-Role-List` without verification. Anyone able to reach TalonPress directly could then forge an admin identity. Use it only when the proxy is the sole ingress (e.g. a Kubernetes `ClusterIP` Service unreachable from outside) and strips those headers from client requests; otherwise leave `AUTHZ_ROLE_SOURCE=jwt`.
+> * **Header Trust:** `AUTHZ_ROLE_SOURCE=header` makes TalonPress believe `X-Auth-Request-Email` and `X-Auth-Request-Role-List` without verification. Anyone able to reach TalonPress directly could then forge an admin identity. Use it only when the proxy is the sole ingress (e.g. a Kubernetes `ClusterIP` Service unreachable from outside) and strips those headers from client requests; otherwise leave `AUTHZ_ROLE_SOURCE=jwt`. With [agent chat](#-agent-chat) enabled the stakes are higher: `X-Auth-Request-Email` is the conversation key, so a forged header also reads that user's chat history.
+> * **Agent Chat Secret:** `TALONPRESS_AGENT_SECRET` grants full use of OpenTalon's embed channel. It is applied server-side only and never reaches the browser — neither do the per-conversation stream tokens, which the stream route mints per connection. Keep it out of `k8s/deployment.yaml` and in a `Secret`.
+> * **Prompt Injection:** Package content becomes model context, so anyone who can publish a package can plant instructions in it. Agent replies are rendered with `textContent` (never `innerHTML`), so a reply cannot inject markup into the served page — but treat what the agent says about a package it read as untrusted input, not as fact.
 > * **Sandboxing:** Because this application serves arbitrary HTML/JS provided by autonomous agents, ensure that the serving domain is isolated or sandboxed (e.g., utilizing unique subdomains or rigid Content Security Policies) to prevent Cross-Site Scripting (XSS) risks to the parent OpenTalon management console.
 
 ```
