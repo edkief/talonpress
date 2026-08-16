@@ -83,6 +83,7 @@ const STYLE = `<style id="az-pb-style">
 .az-pb-chat__dots i:nth-child(2){animation-delay:.15s}
 .az-pb-chat__dots i:nth-child(3){animation-delay:.3s}
 @keyframes az-pb-pulse{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.az-pb-chat__form[hidden]{display:none}
 .az-pb-chat__form{flex:0 0 auto;display:flex;gap:7px;align-items:flex-end;padding:10px 12px;border-top:1px solid #334155}
 .az-pb-chat__input{flex:1 1 auto;min-height:36px;max-height:110px;padding:8px 10px;resize:none;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f1f5f9;font:inherit;font-size:13px;line-height:1.4}
 .az-pb-chat__input::placeholder{color:#64748b}
@@ -347,7 +348,7 @@ if(expanded)setExpanded(false);
 /* ── Agent chat ─────────────────────────────────────────────────────────── */
 var IDENTITY_KEY='tp_agent_identity';
 var IDENTITY_RE=/^[a-z0-9][a-z0-9._-]{1,31}$/;
-var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatInput=null,chatSendBtn=null;
+var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatInput=null,chatSendBtn=null,chatForm=null;
 var chatOpen=false,chatBooted=false,chatSending=false;
 var chatCursor=0,chatSeen=Object.create(null),chatEmpty=null;
 var es=null,esFailures=0,esRetry=null,pollTimer=null,thinkWatchdog=null;
@@ -543,6 +544,7 @@ if(!IDENTITY_RE.test(v)){err.style.display='';return;}
 writeIdentity(v);
 chatLog.replaceChildren();
 renderChatEmpty();
+if(chatForm)chatForm.hidden=false;
 bootChat();
 chatInput.focus();
 }},['Continue']);
@@ -565,7 +567,10 @@ if(chatPanel)chatPanel.hidden=!v;
 if(chatBubble)chatBubble.setAttribute('aria-expanded',String(v));
 if(v){
 setExpanded(false);
-if(needsIdentity()){renderIdentityPrompt();return;}
+/* No composer until we know whose conversation this is — otherwise the first
+   message would land in the shared unnamed one. */
+if(needsIdentity()){if(chatForm)chatForm.hidden=true;renderIdentityPrompt();return;}
+if(chatForm)chatForm.hidden=false;
 bootChat();
 if(chatInput)chatInput.focus();
 }else{
@@ -611,8 +616,8 @@ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}
 });
 chatSendBtn=el('button',{class:'az-pb-chat__send',type:'submit',attrs:{'aria-label':'Send'}});
 chatSendBtn.appendChild(sendSvg());
-var form=el('form',{class:'az-pb-chat__form',onSubmit:function(e){e.preventDefault();sendChat();}},[chatInput,chatSendBtn]);
-chatPanel.appendChild(form);
+chatForm=el('form',{class:'az-pb-chat__form',onSubmit:function(e){e.preventDefault();sendChat();}},[chatInput,chatSendBtn]);
+chatPanel.appendChild(chatForm);
 
 slot.appendChild(chatBubble);
 slot.appendChild(chatPanel);
