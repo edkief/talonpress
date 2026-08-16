@@ -11,8 +11,26 @@ import {
   uploadSessionFiles,
   finalizePublishSession,
   renewPackageToken,
+  setPackageContext,
 } from '../storage/deployments'
 import { packageAccessUrl as packageUrl } from '../storage/urls'
+import { renderContextPayload } from '../agent/context'
+import { config } from '../config'
+
+// Shared by every tool that accepts a page context. Kept loose here — the real
+// validation, with its size limits, lives at the storage write boundary in
+// storage/context.ts, so there is one place to change when the limits move.
+const contextInput = z
+  .object({
+    summary: z.string().optional().describe('What this package is and who it is for'),
+    outline: z.array(z.string()).optional().describe('Section or page headings'),
+    facts: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional()
+      .describe('Short key/value facts an agent should be able to quote'),
+    excerpt: z.string().optional().describe('A representative passage'),
+    version: z.string().optional()
+      .describe('Optional cache key. Derived from the content when omitted; pin it only if you manage your own versioning'),
+  })
+  .describe('Agent-facing description of the package, used when a reader chats about it')
 
 export function registerTools(server: McpServer): void {
   // publish_package
@@ -34,26 +52,31 @@ export function registerTools(server: McpServer): void {
           .min(1)
           .describe('Array of files to publish'),
         default_page: z.string().min(1).describe('Entry-point file served at the package root (e.g. index.html)'),
+        context: contextInput.optional(),
       },
     },
-    async ({ name, visibility, files, default_page }) => {
-      const meta = await publishPackage(name, visibility, files, default_page)
-      const url = packageUrl(meta.id, meta.secure_token)
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              id: meta.id,
-              url,
-              visibility: meta.visibility,
-              ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
-              ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
-              hash: meta.hash,
-              createdAt: meta.createdAt,
-            }),
-          },
-        ],
+    async ({ name, visibility, files, default_page, context }) => {
+      try {
+        const meta = await publishPackage(name, visibility, files, default_page, context)
+        const url = packageUrl(meta.id, meta.secure_token)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: meta.id,
+                url,
+                visibility: meta.visibility,
+                ...(meta.secure_token ? { secure_token: meta.secure_token } : {}),
+                ...(meta.defaultPage ? { default_page: meta.defaultPage } : {}),
+                hash: meta.hash,
+                createdAt: meta.createdAt,
+              }),
+            },
+          ],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
       }
     },
   )
@@ -237,11 +260,12 @@ export function registerTools(server: McpServer): void {
         visibility: z.enum(['public', 'private']).optional().describe('Access visibility (required for mode "create")'),
         package_id: z.string().min(1).optional().describe('Package ID (required for mode "update")'),
         default_page: z.string().min(1).optional().describe('Entry-point file served at the package root; may also be set at finalize'),
+        context: contextInput.optional(),
       },
     },
-    async ({ mode, name, visibility, package_id, default_page }) => {
+    async ({ mode, name, visibility, package_id, default_page, context }) => {
       try {
-        const { sessionId } = await beginPublishSession({ mode, name, visibility, packageId: package_id, defaultPage: default_page })
+        const { sessionId } = await beginPublishSession({ mode, name, visibility, packageId: package_id, defaultPage: default_page, context })
         return { content: [{ type: 'text', text: JSON.stringify({ session_id: sessionId }) }] }
       } catch (err) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
@@ -289,11 +313,12 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         session_id: z.string().min(1).describe('Session ID from begin_publish_session'),
         default_page: z.string().min(1).optional().describe('Entry-point file served at the package root (overrides the value given at begin)'),
+        context: contextInput.optional().describe('Overrides the context given at begin'),
       },
     },
-    async ({ session_id, default_page }) => {
+    async ({ session_id, default_page, context }) => {
       try {
-        const meta = await finalizePublishSession(session_id, default_page)
+        const meta = await finalizePublishSession(session_id, default_page, context)
         const url = packageUrl(meta.id, meta.secure_token)
         return {
           content: [
@@ -375,6 +400,93 @@ export function registerTools(server: McpServer): void {
             }),
           },
         ],
+      }
+    },
+  )
+
+  // set_package_context
+  server.registerTool(
+    'set_package_context',
+    {
+      description:
+        'Sets what an agent should know about a package when a reader chats about it from the ' +
+        'embedded chat bubble: a summary, an outline, key facts and a representative excerpt. ' +
+        'Independent of publishing — use it to correct or enrich the agent\'s view without ' +
+        'republishing files. Pass clear=true to remove the context entirely. ' +
+        'Returns the resulting cache version and whether the size budget forced anything out.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+        context: contextInput.optional(),
+        clear: z.boolean().optional().describe('Remove the stored context instead of setting one'),
+      },
+    },
+    async ({ package_id, context, clear }) => {
+      try {
+        if (!clear && !context) {
+          throw new Error('Provide either a context to set or clear=true')
+        }
+        const meta = await setPackageContext(package_id, clear ? null : context!)
+        if (!meta.context) {
+          return { content: [{ type: 'text', text: JSON.stringify({ id: meta.id, cleared: true }) }] }
+        }
+        const rendered = renderContextPayload(meta)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: meta.id,
+                version: rendered.version,
+                char_count: JSON.stringify(rendered).length,
+                // Surfaced rather than silently applied: an author who is losing
+                // content to the budget should be able to see it and shorten it.
+                truncated: Boolean(rendered.truncated),
+                updated_at: meta.updatedAt,
+              }),
+            },
+          ],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
+      }
+    },
+  )
+
+  // get_package_context
+  server.registerTool(
+    'get_package_context',
+    {
+      description:
+        'Returns the stored agent context for a package alongside the payload actually sent to ' +
+        'the agent — which may be truncated to the size budget, or derived from the file list ' +
+        'when no context has been set.',
+      inputSchema: {
+        package_id: z.string().min(1).describe('Package ID'),
+      },
+    },
+    async ({ package_id }) => {
+      try {
+        const meta = await getPackageMeta(package_id)
+        if (!meta) throw new Error(`Package not found: ${package_id}`)
+        const rendered = renderContextPayload(meta)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: meta.id,
+                stored: meta.context ?? null,
+                derived: !meta.context,
+                rendered,
+                version: rendered.version,
+                char_count: JSON.stringify(rendered).length,
+                max_chars: config.agentMaxContextChars,
+              }),
+            },
+          ],
+        }
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: String(err) }) }], isError: true }
       }
     },
   )
