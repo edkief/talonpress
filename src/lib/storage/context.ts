@@ -14,15 +14,30 @@ import type { PackageContext } from './types'
  * clear error instead of silent truncation. The real budget is enforced once, at
  * render time, against the whole serialized payload.
  */
-const FACT_VALUE = z.union([z.string().max(500), z.number(), z.boolean()])
+const FACT_VALUE = z.union([z.string(), z.number(), z.boolean()])
 
-export const packageContextSchema = z.object({
+/**
+ * Shape only, no size limits — for validating what comes back off disk. Stored data
+ * can legitimately exceed today's limits (written under older ones, or by a hand
+ * edit), and it is the render-time budget's job to cut it down, not this schema's.
+ * Rejecting it here would throw away usable context over a length.
+ */
+export const packageContextReadSchema = z.object({
+  summary: z.string().optional(),
+  outline: z.array(z.string()).optional(),
+  facts: z.record(z.string(), FACT_VALUE).optional(),
+  excerpt: z.string().optional(),
+  version: z.string().optional(),
+  updatedAt: z.string().optional(),
+})
+
+/** Shape *and* size — for validating what an author is asking us to store. */
+export const packageContextSchema = packageContextReadSchema.extend({
   summary: z.string().max(2000).optional(),
   outline: z.array(z.string().max(200)).max(64).optional(),
-  facts: z.record(z.string().max(64), FACT_VALUE).optional(),
+  facts: z.record(z.string().max(64), z.union([z.string().max(500), z.number(), z.boolean()])).optional(),
   excerpt: z.string().max(2000).optional(),
   version: z.string().max(64).optional(),
-  updatedAt: z.string().optional(),
 })
 
 export class PackageContextError extends Error {}
