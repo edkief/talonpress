@@ -65,7 +65,13 @@ const STYLE = `<style id="az-pb-style">
 .az-pb-modal__empty{margin:0;padding:20px 10px;color:#94a3b8;font-size:13px;text-align:center}
 .az-pb-chat{position:absolute;right:0;bottom:54px;display:flex;flex-direction:column;width:min(380px,calc(100vw - 2rem));height:min(70vh,520px);background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden}
 .az-pb-chat[hidden]{display:none}
+/* Anchored to the viewport rather than the bubble's slot, but still stopping short
+   of it — the bubble stays clickable, so the panel can always be put back. */
+.az-pb-chat--max{position:fixed;top:1rem;right:1rem;bottom:4.5rem;left:auto;width:min(900px,calc(100vw - 2rem));height:auto}
+.az-pb-chat--max .az-pb-chat__msg{max-width:min(88%,720px)}
+.az-pb-chat--max .az-pb-chat__log{padding:14px 16px;gap:12px}
 .az-pb-chat__header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid #334155;flex:0 0 auto}
+.az-pb-chat__tools{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .az-pb-chat__eyebrow{margin:0;font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .az-pb-chat__title{margin:2px 0 0;font-size:13px;font-weight:600;color:#f1f5f9;word-break:break-word}
 .az-pb-chat__log{flex:1 1 auto;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
@@ -215,6 +221,8 @@ return r+' '+u[e];
 function packageSvg(){return svg('<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3.3 7.7 12 12l8.7-4.3"/><path d="M16.5 9.4 12 12 7.5 9.4"/>',18);}
 function chatSvg(){return svg('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.3-.6L3 21l1.8-5a8.3 8.3 0 0 1-.8-3.6 8.4 8.4 0 0 1 8.5-8.4 8.4 8.4 0 0 1 8.5 8.4z"/>',18);}
 function sendSvg(){return svg('<path d="m4 12 15-7-6 15-2.5-6z"/>',16);}
+function growSvg(){return svg('<path d="M15 4h5v5"/><path d="M9 20H4v-5"/><path d="M20 4l-6.5 6.5"/><path d="M4 20l6.5-6.5"/>',14);}
+function shrinkSvg(){return svg('<path d="M19 10h-5V5"/><path d="M5 14h5v5"/><path d="M14 10l6-6"/><path d="M10 14l-6 6"/>',14);}
 function shareSvg(){return svg('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>',14);}
 function lockSvg(){return svg('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',14);}
 function globeSvg(){return svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/>',14);}
@@ -373,9 +381,10 @@ if(expanded)setExpanded(false);
 
 /* ── Agent chat ─────────────────────────────────────────────────────────── */
 var IDENTITY_KEY='tp_agent_identity';
+var MAX_KEY='tp_agent_chat_max';
 var IDENTITY_RE=/^[a-z0-9][a-z0-9._-]{1,31}$/;
-var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatStatusText=null,chatInput=null,chatSendBtn=null,chatForm=null;
-var chatOpen=false,chatBooted=false,chatSending=false;
+var chatBubble=null,chatPanel=null,chatLog=null,chatStatus=null,chatStatusText=null,chatInput=null,chatSendBtn=null,chatForm=null,chatMaxBtn=null;
+var chatOpen=false,chatBooted=false,chatSending=false,chatMax=false;
 var chatCursor=0,chatSeen=Object.create(null),chatEmpty=null;
 var es=null,esFailures=0,esRetry=null,pollTimer=null,thinkWatchdog=null;
 
@@ -384,6 +393,30 @@ try{return window.localStorage.getItem(IDENTITY_KEY)||'';}catch(e){return '';}
 }
 function writeIdentity(v){
 try{window.localStorage.setItem(IDENTITY_KEY,v);}catch(e){}
+}
+/* A long answer — a table, a code listing — does not fit the bubble-sized panel, so
+   the size is the reader's call and it is remembered per origin: someone reading on a
+   wide screen should not have to re-maximise on the next page of the package. */
+function setChatMax(v){
+chatMax=!!v;
+try{window.localStorage.setItem(MAX_KEY,chatMax?'1':'0');}catch(e){}
+if(chatPanel){
+if(chatMax)chatPanel.classList.add('az-pb-chat--max');
+else chatPanel.classList.remove('az-pb-chat--max');
+}
+if(chatMaxBtn){
+var label=chatMax?'Restore chat size':'Maximise chat';
+chatMaxBtn.replaceChildren(chatMax?shrinkSvg():growSvg());
+chatMaxBtn.setAttribute('aria-pressed',String(chatMax));
+chatMaxBtn.setAttribute('aria-label',label);
+chatMaxBtn.setAttribute('title',label);
+}
+/* Resizing moves the log's bottom out from under the reader; they were at the
+   newest message, so keep them there. */
+if(chatLog)chatLog.scrollTop=chatLog.scrollHeight;
+}
+function readChatMax(){
+try{return window.localStorage.getItem(MAX_KEY)==='1';}catch(e){return false;}
 }
 /* Only shared-secret deployments need a name; an authz identity is already known. */
 function needsIdentity(){
@@ -815,12 +848,13 @@ chatBubble.appendChild(chatSvg());
 chatPanel=el('div',{class:'az-pb-chat',hidden:true,attrs:{role:'dialog','aria-label':'Agent chat'}});
 
 var closeChat=el('button',{class:'az-pb-modal__close',type:'button',text:'\\u00d7',attrs:{'aria-label':'Close chat'},onClick:function(){setChatOpen(false);}});
+chatMaxBtn=el('button',{class:'az-pb-modal__close az-pb-chat__max',type:'button',attrs:{'aria-pressed':'false'},onClick:function(){setChatMax(!chatMax);}});
 chatPanel.appendChild(el('div',{class:'az-pb-chat__header'},[
 el('div',null,[
 el('p',{class:'az-pb-chat__eyebrow'},['Ask about']),
 el('p',{class:'az-pb-chat__title'},[CHAT.title||CHAT.path]),
 ]),
-closeChat,
+el('div',{class:'az-pb-chat__tools'},[chatMaxBtn,closeChat]),
 ]));
 
 chatLog=el('div',{class:'az-pb-chat__log',attrs:{role:'log','aria-live':'polite'}});
@@ -850,6 +884,7 @@ chatPanel.appendChild(chatForm);
 slot.appendChild(chatBubble);
 slot.appendChild(chatPanel);
 root.appendChild(slot);
+setChatMax(readChatMax());
 
 document.addEventListener('visibilitychange',function(){
 if(document.visibilityState==='hidden')closeStream();

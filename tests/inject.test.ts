@@ -211,6 +211,46 @@ describe('injectBubble', () => {
       expect(fnBody.trimEnd().endsWith('return null;')).toBe(true)
     })
 
+    // A long answer does not fit a bubble-sized panel, so the reader can grow it.
+    describe('the maximise toggle', () => {
+      const body = () => scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+
+      it('puts a toggle in the chat header, next to close', () => {
+        const header = region(body(), 'chatMaxBtn=el(', 'chatLog=el(')
+        expect(header).toContain("onClick:function(){setChatMax(!chatMax);}")
+        expect(header).toContain("el('div',{class:'az-pb-chat__tools'},[chatMaxBtn,closeChat])")
+      })
+
+      it('drives the size off a class the stylesheet defines', () => {
+        const out = injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT })
+        const fn = region(scriptBody(out), 'function setChatMax', 'function readChatMax')
+        expect(fn).toContain("chatPanel.classList.add('az-pb-chat--max')")
+        expect(fn).toContain("chatPanel.classList.remove('az-pb-chat--max')")
+        // The maximised rule has to win over the anchored one, so it must come later.
+        expect(out.indexOf('.az-pb-chat--max{')).toBeGreaterThan(out.indexOf('.az-pb-chat{'))
+        // Still short of the bubble, which is what puts the panel back.
+        expect(out).toContain('.az-pb-chat--max{position:fixed')
+      })
+
+      it('remembers the choice and restores it on the next page', () => {
+        const script = body()
+        const fn = region(script, 'function setChatMax', 'function readChatMax')
+        expect(fn).toContain("window.localStorage.setItem(MAX_KEY,chatMax?'1':'0')")
+        expect(script).toContain("var MAX_KEY='tp_agent_chat_max'")
+        expect(script).toContain('setChatMax(readChatMax());')
+        // Private-mode localStorage throws on both read and write.
+        expect(fn).toContain('try{window.localStorage.setItem')
+        expect(region(script, 'function readChatMax', '/* Only shared-secret')).toContain('catch(e){return false;}')
+      })
+
+      it('keeps the button labelled for what it will do next', () => {
+        const fn = region(body(), 'function setChatMax', 'function readChatMax')
+        expect(fn).toContain("var label=chatMax?'Restore chat size':'Maximise chat'")
+        expect(fn).toContain("chatMaxBtn.setAttribute('aria-pressed',String(chatMax))")
+        expect(fn).toContain("chatMaxBtn.setAttribute('aria-label',label)")
+      })
+    })
+
     // Model output is rendered with textContent; an innerHTML on it would be an XSS
     // sink, since there is no CSP on served pages.
     it('never assigns model output through innerHTML', () => {
