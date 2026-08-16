@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveAgentRequest, buildResource, resolveFilePath } from '@/lib/agent/gate'
 import { renderContextPayload } from '@/lib/agent/context'
-import { callAgent } from '@/lib/agent/client'
+import { callAgent, logAgentFailure } from '@/lib/agent/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +33,7 @@ export async function GET(
   const session = await callAgent('/session', { body: envelope }).catch(() => null)
   const streamToken = (session?.body as { streamToken?: string } | null)?.streamToken
   if (!session?.ok || !streamToken) {
+    if (session?.ok) logAgentFailure('/session', { status: session.status, note: 'no streamToken in response' })
     return NextResponse.json({ error: 'Agent unavailable' }, { status: 502 })
   }
 

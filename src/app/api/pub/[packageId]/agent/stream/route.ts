@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveAgentRequest, buildResource, resolveFilePath } from '@/lib/agent/gate'
 import { renderContextPayload } from '@/lib/agent/context'
-import { callAgent, fetchAgent } from '@/lib/agent/client'
+import { callAgent, fetchAgent, logAgentFailure } from '@/lib/agent/client'
 
 // Nothing about this response is cacheable or prerenderable, and Next's fetch cache
 // would buffer the upstream body into an ArrayBuffer if it thought otherwise.
@@ -39,6 +39,9 @@ export async function GET(
   const session = await callAgent('/session', { body: envelope }).catch(() => null)
   const streamToken = (session?.body as { streamToken?: string } | null)?.streamToken
   if (!session?.ok || !streamToken) {
+    // A failed call has already logged itself. A *successful* one with no token in it
+    // has not, and is the more confusing of the two to meet in production.
+    if (session?.ok) logAgentFailure('/session', { status: session.status, note: 'no streamToken in response' })
     return NextResponse.json({ error: 'Agent unavailable' }, { status: 502 })
   }
 
@@ -64,6 +67,9 @@ export async function GET(
   }
 
   if (!upstream.ok || !upstream.body) {
+    // fetchAgent logs throws, not statuses — this relay is the one caller that reads a
+    // response without going through callAgent, so it reports its own.
+    logAgentFailure('/stream', { status: upstream.status, note: upstream.body ? undefined : 'empty body' })
     return NextResponse.json({ error: 'Agent unavailable' }, { status: 502 })
   }
 

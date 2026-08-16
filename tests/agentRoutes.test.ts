@@ -494,4 +494,82 @@ describe('agent proxy routes', () => {
       expect(res.status).toBe(502)
     })
   })
+
+  // Every failure here answers the browser with a bare "Agent unavailable", so the log
+  // line is the only account of what actually happened. These assert the two halves of
+  // it being useful: it names a cause, and it is safe to leave on in production.
+  describe('failure logging', () => {
+    let warn: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    /** Every failure line logged so far, joined. */
+    function logged(): string {
+      return warn.mock.calls.map(c => c.join(' ')).filter(l => l.includes('agent call failed')).join('\n')
+    }
+
+    it('records the transport reason a 502 came from', async () => {
+      const pkg = await seedPackage()
+      const err = new TypeError('fetch failed')
+      err.cause = Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:3000'), { code: 'ECONNREFUSED' })
+      fetchSpy.mockRejectedValue(err)
+
+      const res = await callRoute('session', pkg.id, { body: {} })
+      expect(res.status).toBe(502)
+
+      // The generic "fetch failed" is undici's for every transport fault; the reason
+      // is only ever in the cause, which is why it is unpacked rather than logged raw.
+      expect(logged()).toContain('path="/session"')
+      expect(logged()).toContain('ECONNREFUSED')
+    })
+
+    it('distinguishes a timeout from a refusal', async () => {
+      const pkg = await seedPackage()
+      fetchSpy.mockRejectedValue(Object.assign(new Error('The operation was aborted due to timeout'), {
+        name: 'TimeoutError',
+      }))
+
+      await callRoute('session', pkg.id, { body: {} })
+      expect(logged()).toContain('TimeoutError')
+    })
+
+    it('records the upstream status and its error string', async () => {
+      const pkg = await seedPackage()
+      agentResponds({ error: 'unknown embed client' }, 401)
+
+      await callRoute('session', pkg.id, { body: {} })
+      expect(logged()).toContain('status=401')
+      expect(logged()).toContain('unknown embed client')
+    })
+
+    // The credential and the stream token are the two things that must never reach a
+    // log aggregator. The token rides in the query string of the very paths that fail.
+    it('never logs the shared secret or a stream token', async () => {
+      const pkg = await seedPackage()
+      fetchSpy.mockImplementation(async (url: string) => {
+        if (String(url).includes('/session')) {
+          return new Response(JSON.stringify({ chatId: 'c', cursor: 0, streamToken: 'stream-tok' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({ error: 'expired' }), { status: 401 })
+      })
+
+      const mod = await import('../src/app/api/pub/[packageId]/agent/messages/route')
+      const { NextRequest } = await import('next/server')
+      const req = new NextRequest(`${BASE}/api/pub/${pkg.id}/agent/messages`, {
+        headers: new Headers({ Authorization: `Bearer ${SECRET}` }),
+      })
+      const res = await mod.GET(req, { params: Promise.resolve({ packageId: pkg.id }) })
+
+      expect(res.status).toBe(502)
+      expect(logged()).toContain('status=401')
+      expect(logged()).not.toContain('stream-tok')
+      expect(logged()).not.toContain(AGENT_SECRET)
+    })
+  })
 })
