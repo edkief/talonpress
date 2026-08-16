@@ -302,4 +302,254 @@ describe('storage/deployments', () => {
     expect(await getPackageMeta(fresh.id)).not.toBeNull()
     expect(await listPackages()).toHaveLength(1)
   })
+
+  // The hash is what tells a consumer "this package changed". Hashing only the
+  // file names made it blind to the most common update of all: same files, new
+  // content.
+  it('update moves the hash when only file contents change', async () => {
+    const { publishPackage, updatePackage } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Hash Content', 'public', [
+      { path: 'index.html', content: '<h1>v1</h1>' },
+    ], 'index.html')
+
+    // Compare update against update, not against publish: a path-only hash also
+    // differs from the publish-time hash, so publish-vs-update would pass even
+    // with the bug in place.
+    const second = await updatePackage(meta.id, [{ path: 'index.html', content: '<h1>v2</h1>' }])
+    const third = await updatePackage(meta.id, [{ path: 'index.html', content: '<h1>v3</h1>' }])
+
+    // The file set is identical throughout — only the bytes moved.
+    expect(second.files).toEqual(meta.files)
+    expect(third.files).toEqual(meta.files)
+    expect(third.hash).not.toBe(second.hash)
+    expect(third.hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  // An update that changes nothing must land on the publish-time hash, which is
+  // only true if both are computed over content in the same order.
+  it('update agrees with publish on the hash for identical bytes', async () => {
+    const { publishPackage, updatePackage } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Hash Domain', 'public', [
+      { path: 'index.html', content: '<h1>v1</h1>' },
+    ], 'index.html')
+
+    const updated = await updatePackage(meta.id, [
+      { path: 'index.html', content: '<h1>v1</h1>' },
+    ])
+
+    expect(updated.hash).toBe(meta.hash)
+  })
+
+  it('update leaves the hash alone when the content is unchanged', async () => {
+    const { publishPackage, updatePackage } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Hash Stable', 'public', [
+      { path: 'index.html', content: '<h1>same</h1>' },
+    ], 'index.html')
+
+    const updated = await updatePackage(meta.id, [
+      { path: 'index.html', content: '<h1>same</h1>' },
+    ])
+
+    expect(updated.hash).toBe(meta.hash)
+  })
+
+  it('update records nested paths with posix separators', async () => {
+    const { publishPackage, updatePackage } = await import('../src/lib/storage/deployments')
+
+    const meta = await publishPackage('Nested', 'public', [
+      { path: 'index.html', content: 'root' },
+    ], 'index.html')
+
+    const updated = await updatePackage(meta.id, [
+      { path: 'sub/deep/a.txt', content: 'nested' },
+    ])
+
+    expect(updated.files).toContain('sub/deep/a.txt')
+    expect(updated.files.some(f => f.includes('\\'))).toBe(false)
+  })
+
+  // updatePackage() now relies on hashDir() matching computeHash(). Pin that so a
+  // future edit to either one cannot silently split the two into different domains.
+  it('hashes the same bytes identically whether published in one call or via a session', async () => {
+    const {
+      publishPackage,
+      beginPublishSession,
+      uploadSessionFiles,
+      finalizePublishSession,
+    } = await import('../src/lib/storage/deployments')
+
+    const files = [
+      { path: 'index.html', content: '<h1>Hello</h1>' },
+      { path: 'assets/app.js', content: 'console.log(1)' },
+    ]
+
+    const direct = await publishPackage('Direct', 'public', files, 'index.html')
+
+    const { sessionId } = await beginPublishSession({
+      mode: 'create',
+      name: 'Streamed',
+      visibility: 'public',
+      defaultPage: 'index.html',
+    })
+    await uploadSessionFiles(sessionId, files)
+    const streamed = await finalizePublishSession(sessionId)
+
+    expect(streamed.hash).toBe(direct.hash)
+  })
+
+  describe('package context', () => {
+    it('publish stores a context and stamps updatedAt', async () => {
+      const { publishPackage, getPackageMeta } = await import('../src/lib/storage/deployments')
+
+      const meta = await publishPackage('Ctx Publish', 'public', [
+        { path: 'index.html', content: 'x' },
+      ], 'index.html', { summary: 'A handbook', outline: ['Intro', 'API'] })
+
+      expect(meta.context?.summary).toBe('A handbook')
+      expect(meta.context?.outline).toEqual(['Intro', 'API'])
+      expect(meta.context?.updatedAt).toBe(meta.updatedAt)
+
+      const fetched = await getPackageMeta(meta.id)
+      expect(fetched?.context?.summary).toBe('A handbook')
+    })
+
+    it('setPackageContext round-trips and clears with null', async () => {
+      const { publishPackage, setPackageContext, getPackageContext } =
+        await import('../src/lib/storage/deployments')
+
+      const meta = await publishPackage('Ctx Set', 'public', [
+        { path: 'index.html', content: 'x' },
+      ], 'index.html')
+
+      expect(await getPackageContext(meta.id)).toBeNull()
+
+      await setPackageContext(meta.id, { summary: 'Now described', facts: { audience: 'ops' } })
+      expect((await getPackageContext(meta.id))?.summary).toBe('Now described')
+      expect((await getPackageContext(meta.id))?.facts).toEqual({ audience: 'ops' })
+
+      const cleared = await setPackageContext(meta.id, null)
+      expect('context' in cleared).toBe(false)
+      expect(await getPackageContext(meta.id)).toBeNull()
+    })
+
+    it('setPackageContext appends a context registry event', async () => {
+      const { publishPackage, setPackageContext } = await import('../src/lib/storage/deployments')
+      const { registryPath } = await import('../src/lib/storage/paths')
+
+      const meta = await publishPackage('Ctx Event', 'public', [
+        { path: 'index.html', content: 'x' },
+      ], 'index.html')
+      await setPackageContext(meta.id, { summary: 'Described' })
+
+      const events = fs.readFileSync(registryPath(), 'utf8')
+        .trim().split('\n').map(l => JSON.parse(l))
+      expect(events.some(e => e.event === 'context' && e.id === meta.id)).toBe(true)
+    })
+
+    it('rejects a malformed context rather than storing it', async () => {
+      const { publishPackage, setPackageContext } = await import('../src/lib/storage/deployments')
+
+      const meta = await publishPackage('Ctx Bad', 'public', [
+        { path: 'index.html', content: 'x' },
+      ], 'index.html')
+
+      await expect(
+        setPackageContext(meta.id, { summary: 42 } as never),
+      ).rejects.toThrow(/Invalid package context/)
+      await expect(
+        setPackageContext(meta.id, { summary: 'x'.repeat(2001) }),
+      ).rejects.toThrow(/Invalid package context/)
+    })
+
+    it('strips unknown keys and empty values', async () => {
+      const { publishPackage, setPackageContext } = await import('../src/lib/storage/deployments')
+
+      const meta = await publishPackage('Ctx Strip', 'public', [
+        { path: 'index.html', content: 'x' },
+      ], 'index.html')
+
+      const updated = await setPackageContext(meta.id, {
+        summary: '  trimmed  ',
+        excerpt: '   ',
+        outline: ['Kept', '  '],
+        secret: 'should not persist',
+      } as never)
+
+      expect(updated.context?.summary).toBe('trimmed')
+      expect(updated.context?.excerpt).toBeUndefined()
+      expect(updated.context?.outline).toEqual(['Kept'])
+      expect('secret' in (updated.context ?? {})).toBe(false)
+    })
+
+    // The whole design rests on context surviving every other meta writer, because
+    // they all spread `...existing` rather than rebuilding the object. Pin it here
+    // rather than trusting it to stay true.
+    it('survives every other write path', async () => {
+      const d = await import('../src/lib/storage/deployments')
+
+      const meta = await d.publishPackage('Ctx Survives', 'private', [
+        { path: 'index.html', content: 'v1' },
+        { path: 'other.html', content: 'o' },
+      ], 'index.html', { summary: 'Durable' })
+
+      const expectSurvived = async (label: string) => {
+        const m = await d.getPackageMeta(meta.id)
+        expect(m?.context?.summary, label).toBe('Durable')
+      }
+
+      await d.updatePackage(meta.id, [{ path: 'index.html', content: 'v2' }])
+      await expectSurvived('updatePackage')
+
+      await d.updateVisibility(meta.id, 'public')
+      await expectSurvived('updateVisibility')
+
+      await d.updateDefaultPage(meta.id, 'other.html')
+      await expectSurvived('updateDefaultPage')
+
+      await d.disablePackage(meta.id)
+      await expectSurvived('disablePackage')
+
+      await d.enablePackage(meta.id)
+      await expectSurvived('enablePackage')
+
+      await d.updateVisibility(meta.id, 'private')
+      await d.renewPackageToken(meta.id)
+      await expectSurvived('renewPackageToken')
+
+      const { sessionId } = await d.beginPublishSession({ mode: 'update', packageId: meta.id })
+      await d.uploadSessionFiles(sessionId, [{ path: 'index.html', content: 'v3' }])
+      await d.finalizePublishSession(sessionId)
+      await expectSurvived('finalizePublishSession')
+    })
+
+    it('finalize applies a context override over the one given at begin', async () => {
+      const d = await import('../src/lib/storage/deployments')
+
+      const { sessionId } = await d.beginPublishSession({
+        mode: 'create',
+        name: 'Ctx Session',
+        visibility: 'public',
+        defaultPage: 'index.html',
+        context: { summary: 'From begin' },
+      })
+      await d.uploadSessionFiles(sessionId, [{ path: 'index.html', content: 'x' }])
+
+      const meta = await d.finalizePublishSession(sessionId, undefined, { summary: 'From finalize' })
+      expect(meta.context?.summary).toBe('From finalize')
+    })
+
+    it('begin rejects a malformed context before any upload', async () => {
+      const d = await import('../src/lib/storage/deployments')
+
+      await expect(d.beginPublishSession({
+        mode: 'create',
+        name: 'Ctx Session Bad',
+        visibility: 'public',
+        context: { outline: 'not an array' } as never,
+      })).rejects.toThrow(/Invalid package context/)
+    })
+  })
 })

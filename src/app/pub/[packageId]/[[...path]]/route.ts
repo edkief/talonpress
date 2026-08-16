@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { getPackageMeta } from '@/lib/storage/deployments'
-import { resolveSafeFilePath } from '@/lib/storage/paths'
+import { resolveSafeFilePath, distDir } from '@/lib/storage/paths'
 import { getContentType } from '@/lib/security'
 import { verifyPackageSession, grantPackageSession } from '@/lib/auth/session'
 import { getAccess } from '@/lib/auth/access'
 import { config } from '@/lib/config'
 import { renderMarkdown } from '@/lib/markdown'
-import { injectBubble } from '@/lib/pubBubble/inject'
+import { injectBubble, type InjectBubbleOptions } from '@/lib/pubBubble/inject'
 
 export async function GET(
   request: NextRequest,
@@ -57,6 +57,11 @@ export async function GET(
   // package session). Anonymous viewers of public packages do not get the bubble.
   const canToggle = hasValidSession || (meta.visibility === 'private' && (hasValidToken || hasPackageSession))
 
+  // Deliberately narrower than canToggle, and matching the agent routes' own gate: a
+  // package token is enough to read a private package but not to drive an agent.
+  // Offering the chat to a token holder would only produce a panel that 401s.
+  const canChat = config.agentEnabled && hasValidSession
+
   const defaultPage = meta.defaultPage ?? 'index.html'
 
   // Redirect bare package root to trailing-slash so relative asset URLs resolve correctly.
@@ -84,7 +89,7 @@ export async function GET(
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, stat, canToggle), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, stat, canToggle, canChat, meta.name), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -105,14 +110,14 @@ export async function GET(
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, idxStat, canToggle), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, idxStat, canToggle, canChat, meta.name), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return withCookie(await serveFile(request, packageId, safePath, stat, canToggle), pkgSessionCookie)
+  return withCookie(await serveFile(request, packageId, safePath, stat, canToggle, canChat, meta.name), pkgSessionCookie)
 }
 
 function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
@@ -120,7 +125,15 @@ function withCookie(response: NextResponse, cookie: string | undefined): NextRes
   return response
 }
 
-async function serveFile(request: NextRequest, packageId: string, filePath: string, stat: fs.Stats, canToggle: boolean): Promise<NextResponse> {
+async function serveFile(
+  request: NextRequest,
+  packageId: string,
+  filePath: string,
+  stat: fs.Stats,
+  canToggle: boolean,
+  canChat: boolean,
+  packageName: string,
+): Promise<NextResponse> {
   const ext = path.extname(filePath).slice(1).toLowerCase()
 
   if (ext === 'md') {
@@ -137,7 +150,9 @@ async function serveFile(request: NextRequest, packageId: string, filePath: stri
     }
     const title = path.basename(filePath, '.md')
     const rendered = renderMarkdown(source, title)
-    const body = canToggle ? injectBubble(rendered, bubbleOptions(packageId)) : rendered
+    const body = canToggle || canChat
+      ? injectBubble(rendered, bubbleOptions(packageId, filePath, title, canChat))
+      : rendered
     return new NextResponse(body, {
       status: 200,
       headers: {
@@ -149,7 +164,9 @@ async function serveFile(request: NextRequest, packageId: string, filePath: stri
 
   if (ext === 'html' || ext === 'htm') {
     const source = await fs.promises.readFile(filePath, 'utf8')
-    const body = canToggle ? injectBubble(source, bubbleOptions(packageId)) : source
+    const body = canToggle || canChat
+      ? injectBubble(source, bubbleOptions(packageId, filePath, packageName, canChat))
+      : source
     return new NextResponse(body, {
       status: 200,
       headers: {
@@ -162,8 +179,31 @@ async function serveFile(request: NextRequest, packageId: string, filePath: stri
   return streamFile(filePath, stat)
 }
 
-function bubbleOptions(packageId: string): { packageId: string; metaUrl: string } {
-  return { packageId, metaUrl: `/api/pub/${packageId}/meta` }
+/**
+ * Tell the injected script which page it is on.
+ *
+ * The agent is told the package as the conversation's resource and the page only as
+ * context, so a reader moving between pages keeps one conversation rather than
+ * starting a new one per file.
+ */
+function bubbleOptions(packageId: string, filePath: string, title: string, canChat: boolean): InjectBubbleOptions {
+  const relative = path.relative(distDir(packageId), filePath).split(path.sep).join('/')
+  return {
+    packageId,
+    metaUrl: `/api/pub/${packageId}/meta`,
+    ...(canChat
+      ? {
+          chat: {
+            base: `/api/pub/${packageId}/agent`,
+            path: relative,
+            title,
+            // Shared-secret admins all resolve to the same identity, so the panel
+            // asks them to name themselves before it opens a conversation.
+            identity: config.authzEnabled ? ('authz' as const) : ('self-declared' as const),
+          },
+        }
+      : {}),
+  }
 }
 
 function streamFile(filePath: string, stat: fs.Stats): NextResponse {

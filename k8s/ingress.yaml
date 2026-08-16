@@ -5,6 +5,14 @@ metadata:
   namespace: talonpress
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # The agent chat relays server-sent events. nginx buffers proxied responses by
+    # default, which holds the stream until the turn ends and defeats the point of
+    # streaming; the app also sends X-Accel-Buffering: no, and this makes it stick.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # A turn can think for a while before its first token. The 60s default closes
+    # the connection mid-turn; the client reconnects with its cursor, so nothing is
+    # lost, but the reconnect churn is avoidable.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
 spec:
   ingressClassName: nginx
   tls:

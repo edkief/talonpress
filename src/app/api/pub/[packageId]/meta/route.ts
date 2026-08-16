@@ -4,6 +4,7 @@ import { getPackageMeta, updateVisibility } from '@/lib/storage/deployments'
 import { verifyPackageSession } from '@/lib/auth/session'
 import { getAccess } from '@/lib/auth/access'
 import { config } from '@/lib/config'
+import { isSameOrigin } from '@/lib/http/origin'
 import { packageAccessUrl } from '@/lib/storage/urls'
 import type { PackageMeta, Visibility } from '@/lib/storage/types'
 
@@ -63,16 +64,6 @@ function canToggleFor(
   if (auth.dashboardSession) return true
   if (meta.visibility === 'private') return auth.packageToken || auth.packageSession
   return false
-}
-
-function isSameOrigin(request: NextRequest): boolean {
-  const origin = request.headers.get('origin')
-  if (!origin) return true
-  try {
-    return new URL(origin).origin === new URL(config.publicBaseUrl).origin
-  } catch {
-    return false
-  }
 }
 
 export async function GET(

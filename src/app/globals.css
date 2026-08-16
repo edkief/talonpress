@@ -610,6 +610,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-size: 0.8125rem;
   padding: 0.625rem 0.875rem;
 }
+.az-auth-hint {
+  margin: -0.25rem 0 0;
+  color: var(--fg2);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
 
 /* ─── Empty state ───────────────────────────────────────────────────── */
 .az-empty {
