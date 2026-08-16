@@ -43,6 +43,12 @@ const PUBLIC_PATHS = [
   '/api/health',
   '/api/mcp',
   '/api/pub/some-id/meta',
+  // The agent routes inherit the /api/pub exemption, so the proxy waves them
+  // through and each handler runs its own admin gate. Pinned here so a change to
+  // PUBLIC_API_PREFIXES that silently starts gating them shows up as a failure.
+  '/api/pub/some-id/agent/session',
+  '/api/pub/some-id/agent/message',
+  '/api/pub/some-id/agent/stream',
   '/pub/some-id',
   '/pub/some-id/index.html',
   '/_next/static/chunk.js',

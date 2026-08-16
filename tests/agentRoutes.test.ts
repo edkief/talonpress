@@ -353,4 +353,145 @@ describe('agent proxy routes', () => {
       expect(body.context.summary).toBe('The widget handbook')
     })
   })
+
+  describe('SSE relay', () => {
+    /** Answer /session with a token, then hand back `streamBody` for /stream. */
+    function agentStreams(streamBody: ReadableStream, opts: { token?: string } = {}) {
+      fetchSpy.mockImplementation(async (url: string) => {
+        if (String(url).includes('/session')) {
+          return new Response(
+            JSON.stringify({ chatId: 'c', cursor: 0, streamToken: opts.token ?? 'stream-tok' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response(streamBody, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      })
+    }
+
+    async function callStream(packageId: string, query = '') {
+      const mod = await import('../src/app/api/pub/[packageId]/agent/stream/route')
+      const { NextRequest } = await import('next/server')
+      const req = new NextRequest(`${BASE}/api/pub/${packageId}/agent/stream${query}`, {
+        headers: new Headers({ Authorization: `Bearer ${SECRET}` }),
+      })
+      return mod.GET(req, { params: Promise.resolve({ packageId }) })
+    }
+
+    // The whole point of the route. If anything buffers — Next's fetch cache, gzip,
+    // an accidental await on .text() — the first chunk cannot arrive before the
+    // upstream stream closes, and a long turn shows nothing until it ends.
+    it('delivers the first chunk before the upstream closes', async () => {
+      let closeUpstream!: () => void
+      const upstreamClosed = new Promise<void>(resolve => { closeUpstream = resolve })
+      let closed = false
+      void upstreamClosed.then(() => { closed = true })
+
+      agentStreams(new ReadableStream({
+        async start(controller) {
+          controller.enqueue(new TextEncoder().encode('event: status\ndata: {"state":"thinking"}\n\n'))
+          await upstreamClosed
+          controller.close()
+        },
+      }))
+
+      const pkg = await seedPackage()
+      const res = await callStream(pkg.id)
+      expect(res.status).toBe(200)
+
+      const reader = res.body!.getReader()
+      const first = await reader.read()
+
+      expect(closed).toBe(false)
+      expect(new TextDecoder().decode(first.value)).toContain('event: status')
+
+      closeUpstream()
+      await reader.read()
+      reader.releaseLock()
+    })
+
+    it('sets headers that survive compression and reverse proxies', async () => {
+      agentStreams(new ReadableStream({ start: c => c.close() }))
+      const pkg = await seedPackage()
+
+      const res = await callStream(pkg.id)
+
+      expect(res.headers.get('content-type')).toContain('text/event-stream')
+      expect(res.headers.get('x-accel-buffering')).toBe('no')
+      // Asserted against the regex Next's bundled compression middleware actually
+      // uses to decide whether to gzip, not a loose substring.
+      expect(res.headers.get('cache-control')).toMatch(/(?:^|,)\s*?no-transform\s*?(?:,|$)/)
+    })
+
+    it('keeps the stream token server-side', async () => {
+      agentStreams(new ReadableStream({ start: c => c.close() }), { token: 'super-secret-token' })
+      const pkg = await seedPackage()
+
+      const res = await callStream(pkg.id)
+      const serialized = JSON.stringify([...res.headers.entries()])
+      expect(serialized).not.toContain('super-secret-token')
+
+      // It reached OpenTalon, just never the browser.
+      const streamCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/stream'))
+      expect(String(streamCall![0])).toContain('token=super-secret-token')
+    })
+
+    it('ties the upstream connection to the client one', async () => {
+      agentStreams(new ReadableStream({ start: c => c.close() }))
+      const pkg = await seedPackage()
+
+      const mod = await import('../src/app/api/pub/[packageId]/agent/stream/route')
+      const { NextRequest } = await import('next/server')
+      const controller = new AbortController()
+      const req = new NextRequest(`${BASE}/api/pub/${pkg.id}/agent/stream`, {
+        headers: new Headers({ Authorization: `Bearer ${SECRET}` }),
+        signal: controller.signal,
+      })
+      await mod.GET(req, { params: Promise.resolve({ packageId: pkg.id }) })
+
+      const streamCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/stream'))
+      const signal = (streamCall![1] as RequestInit).signal!
+      expect(signal.aborted).toBe(false)
+
+      controller.abort()
+      expect(signal.aborted).toBe(true)
+    })
+
+    it('resumes from Last-Event-ID over the since parameter', async () => {
+      agentStreams(new ReadableStream({ start: c => c.close() }))
+      const pkg = await seedPackage()
+
+      const mod = await import('../src/app/api/pub/[packageId]/agent/stream/route')
+      const { NextRequest } = await import('next/server')
+      const req = new NextRequest(`${BASE}/api/pub/${pkg.id}/agent/stream?since=4`, {
+        headers: new Headers({ Authorization: `Bearer ${SECRET}`, 'Last-Event-ID': '11' }),
+      })
+      await mod.GET(req, { params: Promise.resolve({ packageId: pkg.id }) })
+
+      const streamCall = fetchSpy.mock.calls.find(c => String(c[0]).includes('/stream'))
+      expect(String(streamCall![0])).toContain('since=11')
+    })
+
+    it('gates the stream exactly like the POST routes', async () => {
+      agentStreams(new ReadableStream({ start: c => c.close() }))
+      const pkg = await seedPackage()
+
+      const mod = await import('../src/app/api/pub/[packageId]/agent/stream/route')
+      const { NextRequest } = await import('next/server')
+      const anon = new NextRequest(`${BASE}/api/pub/${pkg.id}/agent/stream`)
+      const res = await mod.GET(anon, { params: Promise.resolve({ packageId: pkg.id }) })
+
+      expect(res.status).toBe(401)
+    })
+
+    it('502s when the session exchange yields no token', async () => {
+      agentResponds({ chatId: 'c', cursor: 0 })
+      const pkg = await seedPackage()
+
+      const res = await callStream(pkg.id)
+      expect(res.status).toBe(502)
+    })
+  })
 })
