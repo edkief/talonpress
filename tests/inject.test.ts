@@ -17,6 +17,75 @@ function scriptBody(html: string): string {
   return m[1]
 }
 
+function region(body: string, from: string, to: string): string {
+  const start = body.indexOf(from)
+  const end = body.indexOf(to)
+  if (start === -1 || end === -1 || end < start) throw new Error(`no region ${from}..${to}`)
+  return body.slice(start, end)
+}
+
+/* The markdown renderer builds DOM nodes, so exercising it needs a DOM. jsdom is not
+   a dependency and the script as a whole mounts itself on load, so we run just the
+   renderer against a stub that records what it was asked to build — which is also the
+   sharpest way to assert the no-innerHTML rule: the stub has no innerHTML to assign. */
+const VOID_TAGS = new Set(['br', 'hr'])
+
+function serialize(node: any): string {
+  if (node.tag === '#text') {
+    return String(node.text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
+  let attrs = ''
+  if (node.className) attrs += ` class="${node.className}"`
+  if (node.href !== undefined) attrs += ` href="${node.href}"`
+  for (const [k, v] of Object.entries(node.attrs as Record<string, string>)) attrs += ` ${k}="${v}"`
+  for (const [k, v] of Object.entries(node.style as Record<string, string>)) attrs += ` style-${k}="${v}"`
+  if (VOID_TAGS.has(node.tag)) return `<${node.tag}${attrs}>`
+  return `<${node.tag}${attrs}>${node.children.map(serialize).join('')}</${node.tag}>`
+}
+
+function makeElement(tag: string): any {
+  const node: any = {
+    tag,
+    attrs: {} as Record<string, string>,
+    style: {} as Record<string, string>,
+    children: [] as any[],
+    appendChild(child: any) {
+      node.children.push(child)
+      return child
+    },
+    setAttribute(key: string, value: string) {
+      node.attrs[key] = value
+    },
+  }
+  Object.defineProperty(node, 'textContent', {
+    set(value: string) {
+      node.children = [{ tag: '#text', text: String(value) }]
+    },
+    get() {
+      return node.children.map((c: any) => (c.tag === '#text' ? c.text : '')).join('')
+    },
+  })
+  return node
+}
+
+/** Renders `text` as the given role and returns the resulting markup. */
+function renderChat(text: string, role: 'agent' | 'user' | 'error' = 'agent'): string {
+  const body = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
+  const src =
+    region(body, 'function el(', 'function svg(') +
+    region(body, 'var MD_FENCE=', 'function addMessage') +
+    'renderMessageText'
+
+  const document = {
+    createElement: makeElement,
+    createTextNode: (text: string) => ({ tag: '#text', text: String(text) }),
+  }
+  const render = vm.runInNewContext(src, { document })
+  const root = makeElement('div')
+  render(root, text, role)
+  return root.children.map(serialize).join('')
+}
+
 describe('injectBubble', () => {
   describe('placement', () => {
     it('inserts before the last </body>', () => {
@@ -146,9 +215,99 @@ describe('injectBubble', () => {
     // sink, since there is no CSP on served pages.
     it('never assigns model output through innerHTML', () => {
       const body = scriptBody(injectBubble(PAGE, { packageId: 'p-1', metaUrl: '/m', chat: CHAT }))
-      const renderer = body.slice(body.indexOf('function renderMessageText'))
-      expect(renderer.slice(0, renderer.indexOf('function addMessage'))).not.toContain('innerHTML')
-      expect(body).toContain('node.appendChild(document.createTextNode(parts[i]))')
+      expect(region(body, 'var MD_FENCE=', 'function addMessage')).not.toContain('innerHTML')
+    })
+  })
+
+  describe('markdown in agent replies', () => {
+    it('renders headings, emphasis and inline code', () => {
+      expect(renderChat('## Setup')).toBe('<h4>Setup</h4>')
+      expect(renderChat('**bold** and *italic* and ~~gone~~')).toBe(
+        '<p><strong>bold</strong> and <em>italic</em> and <s>gone</s></p>',
+      )
+      expect(renderChat('run `npm test` first')).toBe('<p>run <code>npm test</code> first</p>')
+      // Page headings outrank the widget's, so `#` starts at h3.
+      expect(renderChat('# Top')).toBe('<h3>Top</h3>')
+      expect(renderChat('##### Deep\n###### Deeper')).toBe('<h6>Deep</h6><h6>Deeper</h6>')
+    })
+
+    it('renders fenced code verbatim, markdown and all', () => {
+      expect(renderChat('```js\nif (a && b) **x**;\n```')).toBe(
+        '<pre><code data-lang="js">if (a &amp;&amp; b) **x**;</code></pre>',
+      )
+      // An unterminated fence still closes at the end of the message.
+      expect(renderChat('```\nabc')).toBe('<pre><code>abc</code></pre>')
+    })
+
+    it('renders lists, including nested ones and code inside an item', () => {
+      expect(renderChat('- one\n- two')).toBe('<ul><li><p>one</p></li><li><p>two</p></li></ul>')
+      expect(renderChat('3. three\n4. four')).toBe(
+        '<ol start="3"><li><p>three</p></li><li><p>four</p></li></ol>',
+      )
+      expect(renderChat('- outer\n  - inner')).toBe(
+        '<ul><li><p>outer</p><ul><li><p>inner</p></li></ul></li></ul>',
+      )
+      expect(renderChat('- item\n  ```\n  code\n  ```')).toBe(
+        '<ul><li><p>item</p><pre><code>code</code></pre></li></ul>',
+      )
+    })
+
+    it('renders quotes, rules and tables', () => {
+      expect(renderChat('> quoted\n> still')).toBe('<blockquote><p>quoted<br>still</p></blockquote>')
+      expect(renderChat('---')).toBe('<hr>')
+      expect(renderChat('| a | b |\n| --- | --:|\n| 1 | 2 |')).toBe(
+        '<table><thead><tr><th>a</th><th style-textAlign="right">b</th></tr></thead>' +
+          '<tbody><tr><td>1</td><td style-textAlign="right">2</td></tr></tbody></table>',
+      )
+    })
+
+    it('keeps the line breaks the agent wrote, and splits paragraphs on blanks', () => {
+      expect(renderChat('one\ntwo\n\nthree')).toBe('<p>one<br>two</p><p>three</p>')
+    })
+
+    // The renderer is the one place agent output reaches an attribute rather than a
+    // text node, so the scheme allowlist is what stops a link being an XSS sink.
+    it('links only to schemes it can vouch for', () => {
+      expect(renderChat('[docs](https://example.com/a)')).toBe(
+        '<p><a href="https://example.com/a" target="_blank" rel="noopener noreferrer nofollow">docs</a></p>',
+      )
+      expect(renderChat('[here](./page2.html)')).toBe(
+        '<p><a href="./page2.html" target="_blank" rel="noopener noreferrer nofollow">here</a></p>',
+      )
+      // A scheme we don't vouch for keeps its text and loses its link.
+      expect(renderChat('[click](javascript:alert)')).toBe('<p><span>click</span></p>')
+      expect(renderChat('[click](data:text/html,hi)')).toBe('<p><span>click</span></p>')
+      // A URL with parens is not link syntax at all, so it stays inert text.
+      expect(renderChat('[click](javascript:alert(1))')).toBe(
+        '<p>[click](javascript:alert(1))</p>',
+      )
+      // An image is shown as a link: the agent should not be able to make a served
+      // page fetch an arbitrary remote URL on render.
+      expect(renderChat('![alt](https://evil.example/pixel.png)')).toBe(
+        '<p><a href="https://evil.example/pixel.png" target="_blank" rel="noopener noreferrer nofollow">alt</a></p>',
+      )
+    })
+
+    it('renders HTML in agent output as text, never as markup', () => {
+      expect(renderChat('<img src=x onerror=alert(1)>')).toBe(
+        '<p>&lt;img src=x onerror=alert(1)&gt;</p>',
+      )
+      expect(renderChat('**<b>hi</b>**')).toBe('<p><strong>&lt;b&gt;hi&lt;/b&gt;</strong></p>')
+      expect(renderChat('`<script>alert(1)</script>`')).toBe(
+        '<p><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></p>',
+      )
+    })
+
+    it('leaves what the user typed and what we wrote alone', () => {
+      // Their asterisks are theirs; pre-wrap keeps the shape of what they typed.
+      expect(renderChat('**not bold**', 'user')).toBe('**not bold**')
+      expect(renderChat('# 1 * 2', 'error')).toBe('# 1 * 2')
+    })
+
+    it('survives malformed markdown without throwing', () => {
+      for (const text of ['', '***', '| a |', '- ', '```', '[x](', '_a', '#'.repeat(9), '>']) {
+        expect(() => renderChat(text)).not.toThrow()
+      }
     })
   })
 })

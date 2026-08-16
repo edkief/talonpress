@@ -69,12 +69,30 @@ const STYLE = `<style id="az-pb-style">
 .az-pb-chat__eyebrow{margin:0;font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .az-pb-chat__title{margin:2px 0 0;font-size:13px;font-weight:600;color:#f1f5f9;word-break:break-word}
 .az-pb-chat__log{flex:1 1 auto;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
-.az-pb-chat__msg{max-width:88%;padding:8px 11px;border-radius:10px;font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
-.az-pb-chat__msg--user{align-self:flex-end;background:#4f46e5;color:#fff;border-bottom-right-radius:3px}
+.az-pb-chat__msg{max-width:88%;padding:8px 11px;border-radius:10px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.az-pb-chat__msg--user{align-self:flex-end;background:#4f46e5;color:#fff;border-bottom-right-radius:3px;white-space:pre-wrap}
 .az-pb-chat__msg--agent{align-self:flex-start;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-bottom-left-radius:3px}
-.az-pb-chat__msg--error{align-self:stretch;max-width:100%;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:12px}
-.az-pb-chat__msg pre{margin:6px 0 0;padding:8px;background:#020617;border:1px solid #334155;border-radius:6px;overflow-x:auto}
-.az-pb-chat__msg pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}
+.az-pb-chat__msg--error{align-self:stretch;max-width:100%;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:12px;white-space:pre-wrap}
+.az-pb-chat__msg>:first-child{margin-top:0}
+.az-pb-chat__msg>:last-child{margin-bottom:0}
+.az-pb-chat__msg p{margin:0 0 8px}
+.az-pb-chat__msg h1,.az-pb-chat__msg h2,.az-pb-chat__msg h3,.az-pb-chat__msg h4,.az-pb-chat__msg h5,.az-pb-chat__msg h6{margin:12px 0 6px;color:#f1f5f9;font-size:13px;font-weight:700;line-height:1.35}
+.az-pb-chat__msg h1{font-size:15px}
+.az-pb-chat__msg h2{font-size:14px}
+.az-pb-chat__msg ul,.az-pb-chat__msg ol{margin:6px 0;padding-left:20px}
+.az-pb-chat__msg li{margin:2px 0}
+.az-pb-chat__msg li>p{margin:0}
+.az-pb-chat__msg li>ul,.az-pb-chat__msg li>ol{margin:2px 0}
+.az-pb-chat__msg blockquote{margin:8px 0;padding:1px 0 1px 10px;border-left:2px solid #475569;color:#94a3b8}
+.az-pb-chat__msg hr{margin:10px 0;border:0;border-top:1px solid #334155}
+.az-pb-chat__msg a{color:#a5b4fc;text-decoration:underline}
+.az-pb-chat__msg a:hover{color:#c7d2fe}
+.az-pb-chat__msg code{padding:1px 4px;border-radius:4px;background:rgba(148,163,184,.2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.az-pb-chat__msg pre{margin:8px 0;padding:8px;background:#020617;border:1px solid #334155;border-radius:6px;overflow-x:auto}
+.az-pb-chat__msg pre code{padding:0;border-radius:0;background:none;white-space:pre}
+.az-pb-chat__msg table{margin:8px 0;border-collapse:collapse;width:100%;font-size:12px}
+.az-pb-chat__msg th,.az-pb-chat__msg td{padding:4px 7px;border:1px solid #334155;text-align:left;vertical-align:top}
+.az-pb-chat__msg th{background:rgba(148,163,184,.12);font-weight:600}
 .az-pb-chat__empty{margin:auto;padding:0 8px;color:#94a3b8;font-size:12px;text-align:center;line-height:1.5}
 .az-pb-chat__status{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:0 14px 8px;color:#94a3b8;font-size:12px}
 .az-pb-chat__status[hidden]{display:none}
@@ -100,6 +118,14 @@ const STYLE = `<style id="az-pb-style">
 .az-pb-chat__title{color:#0f172a}
 .az-pb-chat__msg--agent{background:#f8fafc;border-color:#e2e8f0;color:#0f172a}
 .az-pb-chat__msg pre{background:#f1f5f9;border-color:#e2e8f0}
+.az-pb-chat__msg h1,.az-pb-chat__msg h2,.az-pb-chat__msg h3,.az-pb-chat__msg h4,.az-pb-chat__msg h5,.az-pb-chat__msg h6{color:#0f172a}
+.az-pb-chat__msg blockquote{border-color:#cbd5e1;color:#475569}
+.az-pb-chat__msg hr{border-color:#e2e8f0}
+.az-pb-chat__msg a{color:#4338ca}
+.az-pb-chat__msg a:hover{color:#3730a3}
+.az-pb-chat__msg code{background:rgba(15,23,42,.07)}
+.az-pb-chat__msg th,.az-pb-chat__msg td{border-color:#e2e8f0}
+.az-pb-chat__msg th{background:#f1f5f9}
 .az-pb-chat__input{background:#fff;border-color:#cbd5e1;color:#0f172a}
 .az-pb-chat__intro{color:#475569}
 }
@@ -384,22 +410,197 @@ body:JSON.stringify(chatBody(extra))
 });
 }
 
-/* Model output is never parsed as HTML. Fenced blocks become <pre><code>, prose
-   becomes a text node; both are filled with textContent, so nothing the agent (or
-   the page it read) emits can become markup. */
-function renderMessageText(node,text){
-var parts=String(text==null?'':text).split(/\`\`\`/);
-for(var i=0;i<parts.length;i++){
-if(!parts[i])continue;
-if(i%2===1){
-var body=parts[i].replace(/^[^\\n]*\\n/,'');
-var code=el('code');code.textContent=body;
-var pre=el('pre');pre.appendChild(code);
-node.appendChild(pre);
-}else{
-node.appendChild(document.createTextNode(parts[i]));
+/* ── Markdown ───────────────────────────────────────────────────────────────
+   The agent writes markdown, so we render it — but never by parsing it as HTML.
+   Every element here is built with createElement and every leaf is filled with
+   textContent or a text node, so nothing the agent (or the page it read) emits can
+   become markup. The one place a value reaches an attribute is a link href, and
+   mdUrl() only lets http(s)/mailto/relative through. Served pages carry no CSP, so
+   this renderer staying an innerHTML-free zone is what keeps that safe. */
+var MD_FENCE=/^ {0,3}(\`{3,}|~{3,})(.*)$/;
+var MD_HEADING=/^ {0,3}(#{1,6})\\s+(.*?)\\s*#*\\s*$/;
+var MD_HR=/^ {0,3}([-*_])(?: *\\1){2,} *$/;
+var MD_QUOTE=/^ {0,3}> ?(.*)$/;
+var MD_ITEM=/^( *)([-*+]|\\d{1,9}[.)])\\s+(.*)$/;
+var MD_TABLE_SEP=/^ *\\|? *:?-+:? *(\\| *:?-+:? *)+\\|? *$/;
+var MD_INLINE=/(\`+)([\\s\\S]*?)\\1|\\*\\*([\\s\\S]+?)\\*\\*|__([\\s\\S]+?)__|\\*([^\\s*][\\s\\S]*?)\\*|_([^\\s_][\\s\\S]*?)_|~~([\\s\\S]+?)~~|!?\\[([^\\]]*)\\]\\(\\s*([^()\\s]*)(?:\\s+"[^"]*")?\\s*\\)|<(https?:\\/\\/[^>\\s]+)>/g;
+
+/* Relative links point back into the package being served, so they stay. A scheme we
+   do not know — javascript:, data: — is not something we hand a click to. */
+function mdUrl(url){
+var u=String(url==null?'':url).trim();
+if(/^(https?:|mailto:)/i.test(u))return u;
+if(/^[a-z][a-z0-9+.-]*:/i.test(u))return null;
+return u||null;
+}
+function mdLink(text,url){
+var label=text||url||'';
+var href=mdUrl(url);
+if(!href){var span=el('span');mdInline(span,label);return span;}
+var a=el('a',{href:href,attrs:{target:'_blank',rel:'noopener noreferrer nofollow'}});
+mdInline(a,label);
+return a;
+}
+/* A fresh regex per call: mdInline recurses into emphasis, and a shared /g literal
+   would have its lastIndex clobbered by the inner walk. */
+function mdInline(parent,text){
+var src=String(text==null?'':text);
+var re=new RegExp(MD_INLINE.source,'g');
+var last=0,m;
+while((m=re.exec(src))){
+if(m[0]===''){re.lastIndex++;continue;}
+if(m.index>last)parent.appendChild(document.createTextNode(src.slice(last,m.index)));
+last=re.lastIndex;
+if(m[2]!==undefined){var c=el('code');c.textContent=m[2].replace(/^ (.*) $/,'$1');parent.appendChild(c);}
+else if(m[3]!==undefined||m[4]!==undefined){var b=el('strong');mdInline(b,m[3]!==undefined?m[3]:m[4]);parent.appendChild(b);}
+else if(m[5]!==undefined||m[6]!==undefined){var i=el('em');mdInline(i,m[5]!==undefined?m[5]:m[6]);parent.appendChild(i);}
+else if(m[7]!==undefined){var s=el('s');mdInline(s,m[7]);parent.appendChild(s);}
+else if(m[9]!==undefined){parent.appendChild(mdLink(m[8],m[9]));}
+else if(m[10]!==undefined){parent.appendChild(mdLink(m[10],m[10]));}
+}
+if(last<src.length)parent.appendChild(document.createTextNode(src.slice(last)));
+}
+
+function mdFence(parent,lines,i,open){
+var mark=open[1].charAt(0),buf=[],j=i+1;
+for(;j<lines.length;j++){
+var c=lines[j].match(MD_FENCE);
+if(c&&c[1].charAt(0)===mark&&c[1].length>=open[1].length&&!c[2].trim())break;
+buf.push(lines[j]);
+}
+var lang=(open[2]||'').trim().split(/\\s+/)[0];
+var code=el('code');
+code.textContent=buf.join('\\n');
+if(lang)code.setAttribute('data-lang',lang);
+var pre=el('pre');pre.appendChild(code);parent.appendChild(pre);
+return j+1;
+}
+function mdQuote(parent,lines,i){
+var buf=[];
+while(i<lines.length){
+var m=lines[i].match(MD_QUOTE);
+if(m){buf.push(m[1]);i++;continue;}
+/* Lazy continuation: an unmarked line still belongs to the quote until a blank. */
+if(!lines[i].trim())break;
+buf.push(lines[i]);i++;
+}
+var q=el('blockquote');
+mdBlocks(q,buf.join('\\n'));
+parent.appendChild(q);
+return i;
+}
+/* Each item is gathered as raw lines and parsed as its own document, which is what
+   gets nested lists, fenced code inside a bullet and multi-paragraph items for free. */
+function mdList(parent,lines,i){
+var first=lines[i].match(MD_ITEM);
+var indent=first[1].length;
+var ordered=first[2].length>1;
+var list=el(ordered?'ol':'ul');
+if(ordered){var start=parseInt(first[2],10);if(start>1)list.setAttribute('start',String(start));}
+while(i<lines.length){
+var m=lines[i].match(MD_ITEM);
+if(!m||m[1].length!==indent)break;
+var buf=[m[3]];
+i++;
+while(i<lines.length){
+var line=lines[i];
+if(!line.trim()){
+/* A blank line only stays inside the item if the item then continues. */
+if(i+1<lines.length&&/^ {2,}\\S/.test(lines[i+1])){buf.push('');i++;continue;}
+break;
+}
+var deeper=line.match(MD_ITEM);
+if(deeper&&deeper[1].length===indent)break;
+if(!/^ {2,}/.test(line))break;
+buf.push(line.replace(/^ {1,4}/,''));i++;
+}
+var li=el('li');
+mdBlocks(li,buf.join('\\n'));
+list.appendChild(li);
+}
+parent.appendChild(list);
+return i;
+}
+function mdCells(line){
+return line.replace(/^\\s*\\|/,'').replace(/\\|\\s*$/,'').split('|').map(function(c){return c.trim();});
+}
+function mdTable(parent,lines,i){
+var head=mdCells(lines[i]);
+var align=mdCells(lines[i+1]).map(function(c){
+if(/^:-+:$/.test(c))return 'center';
+if(/^-+:$/.test(c))return 'right';
+return '';
+});
+var table=el('table');
+var headRow=el('tr');
+for(var c=0;c<head.length;c++){
+var th=el('th');
+if(align[c])th.style.textAlign=align[c];
+mdInline(th,head[c]);
+headRow.appendChild(th);
+}
+var thead=el('thead');thead.appendChild(headRow);table.appendChild(thead);
+var body=el('tbody');
+var j=i+2;
+for(;j<lines.length;j++){
+if(!lines[j].trim()||lines[j].indexOf('|')===-1)break;
+var cells=mdCells(lines[j]);
+var tr=el('tr');
+for(var k=0;k<head.length;k++){
+var td=el('td');
+if(align[k])td.style.textAlign=align[k];
+mdInline(td,cells[k]||'');
+tr.appendChild(td);
+}
+body.appendChild(tr);
+}
+table.appendChild(body);
+parent.appendChild(table);
+return j;
+}
+/* Chat is not prose: a single newline is a break the reader meant, not a space. */
+function mdParagraph(parent,lines,i){
+var buf=[];
+while(i<lines.length){
+var line=lines[i];
+if(!line.trim())break;
+if(buf.length&&(MD_FENCE.test(line)||MD_HEADING.test(line)||MD_HR.test(line)||MD_QUOTE.test(line)||MD_ITEM.test(line)))break;
+buf.push(line.trim());i++;
+}
+var p=el('p');
+for(var k=0;k<buf.length;k++){
+if(k)p.appendChild(el('br'));
+mdInline(p,buf[k]);
+}
+parent.appendChild(p);
+return i;
+}
+function mdBlocks(parent,text){
+var lines=String(text==null?'':text).replace(/\\r\\n?/g,'\\n').split('\\n');
+var i=0;
+while(i<lines.length){
+var line=lines[i],m;
+if(!line.trim()){i++;continue;}
+if((m=line.match(MD_FENCE))){i=mdFence(parent,lines,i,m);continue;}
+if((m=line.match(MD_HEADING))){
+/* h3 and down: the page owns h1/h2, and this is a widget floating over it. */
+var h=el('h'+Math.min(m[1].length+2,6));
+mdInline(h,m[2]);
+parent.appendChild(h);
+i++;continue;
+}
+if(MD_HR.test(line)){parent.appendChild(el('hr'));i++;continue;}
+if(MD_QUOTE.test(line)){i=mdQuote(parent,lines,i);continue;}
+if(MD_ITEM.test(line)){i=mdList(parent,lines,i);continue;}
+if(line.indexOf('|')!==-1&&i+1<lines.length&&MD_TABLE_SEP.test(lines[i+1])){i=mdTable(parent,lines,i);continue;}
+i=mdParagraph(parent,lines,i);
 }
 }
+/* Only the agent writes markdown. What the user typed and what we wrote about a
+   failure are shown verbatim, kept readable by white-space:pre-wrap. */
+function renderMessageText(node,text,role){
+if(role==='agent')mdBlocks(node,text);
+else node.appendChild(document.createTextNode(String(text==null?'':text)));
 }
 function addMessage(role,text,key){
 if(key){if(chatSeen[key])return chatSeen[key];}
@@ -408,7 +609,7 @@ var cls=role==='user'?'az-pb-chat__msg az-pb-chat__msg--user'
 :role==='error'?'az-pb-chat__msg az-pb-chat__msg--error'
 :'az-pb-chat__msg az-pb-chat__msg--agent';
 var node=el('div',{class:cls});
-renderMessageText(node,text);
+renderMessageText(node,text,role==='user'||role==='error'?role:'agent');
 chatLog.appendChild(node);
 chatLog.scrollTop=chatLog.scrollHeight;
 if(key)chatSeen[key]=node;
