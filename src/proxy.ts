@@ -7,7 +7,9 @@ const PUBLIC_PREFIXES = ['/auth', '/api/health', '/api/mcp', '/api/pub', '/pub',
 function isProtected(pathname: string): boolean {
   if (!appConfig.authEnabled) return false
   if (PUBLIC_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return false
-  if (pathname === '/') return true
+  // The root gates itself: it renders the dashboard for admins and a public
+  // landing page for everyone else, rather than returning a bare 401/403 body.
+  if (pathname === '/') return false
   return pathname.startsWith('/packages') || pathname.startsWith('/api/')
 }
 

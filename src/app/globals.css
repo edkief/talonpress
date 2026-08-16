@@ -403,6 +403,177 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 /* ─── Auth page ─────────────────────────────────────────────────────── */
+/* Public landing page shown at / to visitors without management access */
+.az-hero-bg {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background:
+    radial-gradient(70rem 34rem at 50% -12%, rgba(79, 70, 229, 0.20), transparent 70%),
+    var(--bg);
+  padding: 4rem 1.25rem 3rem;
+}
+.az-hero {
+  width: 100%;
+  max-width: 56rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+.az-hero-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.875rem;
+}
+.az-hero-logo { line-height: 0; }
+.az-hero-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--indigo-400);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  background: var(--surface);
+}
+.az-hero-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+.az-hero-tagline {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--fg2);
+  max-width: 38rem;
+}
+.az-hero-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--fg3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.875rem;
+  max-width: 34rem;
+}
+.az-hero-note--warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--fg2);
+}
+.az-hero-note code { font-size: 0.75rem; color: var(--indigo-400); }
+.az-hero-note strong { color: var(--fg1); font-weight: 600; }
+.az-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+.az-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--indigo-600);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.az-hero-btn:hover { background: var(--indigo-700); }
+.az-hero-btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--fg1);
+}
+.az-hero-btn--ghost:hover { background: var(--surface); }
+
+.az-hero-section { display: flex; flex-direction: column; gap: 1rem; }
+.az-hero-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  text-align: center;
+}
+.az-hero-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.875rem;
+}
+.az-hero-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.az-hero-card-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  background: rgba(79, 70, 229, 0.15);
+  color: var(--indigo-400);
+}
+.az-hero-card-title { font-size: 0.9375rem; font-weight: 600; }
+.az-hero-card-body { font-size: 0.8125rem; line-height: 1.6; color: var(--fg2); }
+
+.az-hero-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.875rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: none;
+}
+.az-hero-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.25rem;
+}
+.az-hero-step-n {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--indigo-400);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.125rem;
+}
+.az-hero-step-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.125rem; }
+.az-hero-step-body { font-size: 0.8125rem; line-height: 1.55; color: var(--fg2); }
+
+.az-hero-foot {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--fg3);
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+.az-hero-foot a { color: var(--indigo-400); text-decoration: none; }
+.az-hero-foot a:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .az-hero-bg { padding: 2.5rem 1rem 2rem; }
+  .az-hero { gap: 2.25rem; }
+  .az-hero-title { font-size: 2rem; }
+  .az-hero-tagline { font-size: 1rem; }
+}
+
 .az-auth-bg {
   min-height: 100vh;
   display: flex;

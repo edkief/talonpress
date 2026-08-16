@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import LandingHero from '@/components/LandingHero'
+import { getAccess } from '@/lib/auth/access'
 import { CleanupOldPackages } from '@/components/CleanupOldPackages'
 import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
@@ -77,6 +79,14 @@ function summarizePackages(packages: PackageMeta[]) {
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
+  // `/` is excluded from the proxy gate so visitors get a readable page instead of
+  // a 401 body — which means the dashboard must enforce the admin check itself.
+  // Bail before touching storage so nothing about the packages leaks.
+  const access = await getAccess()
+  if (!access.isAdmin) {
+    return <LandingHero authenticated={access.authenticated} username={access.username} />
+  }
+
   const packages = await listPackages()
   const publicCount = packages.filter(p => p.visibility === 'public').length
   const privateCount = packages.filter(p => p.visibility === 'private').length
