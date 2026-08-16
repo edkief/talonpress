@@ -310,6 +310,10 @@ kubectl apply -k k8s/
 > [!NOTE]
 > The sample deployment uses `registry.kieffer.me/talonpress:latest`. Update the `image:` field in `k8s/deployment.yaml` and add your registry credentials (`imagePullSecrets`) before deploying to your own cluster. Environment variables (`TALONPRESS_SHARED_SECRET`, `PUBLIC_BASE_URL`) should be injected via a Kubernetes Secret rather than hardcoded in the manifest.
 
+### Health endpoint
+
+`GET /api/health` returns `{"status":"ok","uptime":<seconds>}` and is never gated — kubelet probes carry no authz-proxy headers and no shared secret, so a probe against a protected path such as `/` would fail readiness as soon as auth is enabled. It reports process liveness only, exposing no configuration, identity, or storage detail. The sample probes in `deployment.yaml` point at it.
+
 ---
 
 ## 🔒 Security Considerations
