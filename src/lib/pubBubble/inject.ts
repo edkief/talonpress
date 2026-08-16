@@ -307,10 +307,25 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
 else{mount();}
 })();</script>`
 
+/**
+ * Serialise a value for embedding in an inline `<script>`.
+ *
+ * Two hazards, both of which bite the moment a value is not a slugified id:
+ *
+ *  - JSON.stringify does not escape `/`, so a string containing `</script>` ends the
+ *    script block early and everything after it is parsed as HTML.
+ *  - String.replace(string, string) treats `$&`, `` $` `` and `$'` in the *replacement*
+ *    as backreferences, so those sequences would be rewritten on the way in. Callers
+ *    pass this through a replacer function, which is exempt from that.
+ */
+function jsonForScript(value: unknown): string {
+  return JSON.stringify(value ?? null).replace(/</g, '\\u003c')
+}
+
 export function injectBubble(html: string, opts: InjectBubbleOptions): string {
   const script = SCRIPT_TEMPLATE
-    .replace('__PKG_ID__', JSON.stringify(opts.packageId))
-    .replace('__META_URL__', JSON.stringify(opts.metaUrl))
+    .replace('__PKG_ID__', () => jsonForScript(opts.packageId))
+    .replace('__META_URL__', () => jsonForScript(opts.metaUrl))
 
   const block = `${STYLE}\n${script}\n`
 
