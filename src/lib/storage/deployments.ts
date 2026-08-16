@@ -13,7 +13,8 @@ import {
   generateSessionId,
 } from './paths'
 import { appendRegistryEvent } from './registry'
-import type { FileInput, PackageMeta, Visibility } from './types'
+import { normalizePackageContext, isEmptyContext } from './context'
+import type { FileInput, PackageContext, PackageMeta, Visibility } from './types'
 
 // --- Utilities ---
 
@@ -29,6 +30,13 @@ function computeHash(files: FileInput[]): string {
     hash.update(f.encoding === 'base64' ? Buffer.from(f.content, 'base64') : f.content)
   }
   return hash.digest('hex')
+}
+
+// Validate a caller-supplied context and stamp it with the write time. The stamp is
+// stored, never computed at read time: the rendered form of this object keys a prompt
+// cache upstream, so it has to be stable between writes.
+function stampContext(context: PackageContext, now: string): PackageContext {
+  return { ...normalizePackageContext(context), updatedAt: now }
 }
 
 // Resolve `rel` under `base`, rejecting anything that escapes the directory.
@@ -133,6 +141,7 @@ export async function publishPackage(
   visibility: Visibility,
   files: FileInput[],
   defaultPage?: string,
+  context?: PackageContext,
 ): Promise<PackageMeta> {
   await ensureDirs()
 
@@ -165,6 +174,7 @@ export async function publishPackage(
     visibility,
     ...(secure_token ? { secure_token, tokenGeneratedAt } : {}),
     defaultPage: effectivePage,
+    ...(context ? { context: stampContext(context, now) } : {}),
     hash,
     files: filePaths,
     sizeBytes,
@@ -368,6 +378,40 @@ export async function updateDefaultPage(id: string, defaultPage: string): Promis
   return updated
 }
 
+/**
+ * Set or clear the agent-facing context for a package. Passing `null` removes it.
+ *
+ * Separate from updatePackage() on purpose: context describes a package rather than
+ * being part of it, and the agent's view of a package usually needs correcting
+ * without republishing a single file.
+ */
+export async function setPackageContext(
+  id: string,
+  context: PackageContext | null,
+): Promise<PackageMeta> {
+  const meta = await getPackageMeta(id)
+  if (!meta) throw new Error(`Package not found: ${id}`)
+
+  const now = new Date().toISOString()
+  const normalized = context ? stampContext(context, now) : null
+
+  const updated: PackageMeta = { ...meta, updatedAt: now }
+  if (!normalized || isEmptyContext(normalized)) {
+    delete updated.context
+  } else {
+    updated.context = normalized
+  }
+
+  await fs.promises.writeFile(metaPath(id), JSON.stringify(updated, null, 2), 'utf8')
+  await appendRegistryEvent({ ts: now, event: 'context', id, hash: meta.hash })
+  return updated
+}
+
+export async function getPackageContext(id: string): Promise<PackageContext | null> {
+  const meta = await getPackageMeta(id)
+  return meta?.context ?? null
+}
+
 export async function disablePackage(id: string): Promise<PackageMeta> {
   const meta = await getPackageMeta(id)
   if (!meta) throw new Error(`Package not found: ${id}`)
@@ -404,6 +448,7 @@ interface PublishSession {
   visibility?: Visibility
   packageId?: string
   defaultPage?: string
+  context?: PackageContext
   createdAt: string
   fileCount: number
 }
@@ -458,6 +503,7 @@ export async function beginPublishSession(opts: {
   visibility?: Visibility
   packageId?: string
   defaultPage?: string
+  context?: PackageContext
 }): Promise<{ sessionId: string }> {
   await ensureDirs()
   await fs.promises.mkdir(sessionsDir(), { recursive: true })
@@ -471,6 +517,10 @@ export async function beginPublishSession(opts: {
     const existing = await getPackageMeta(opts.packageId)
     if (!existing) throw new Error(`Package not found: ${opts.packageId}`)
   }
+
+  // Validate before any upload work, so a malformed context fails on the call that
+  // sent it rather than after the client has streamed a whole package up.
+  const context = opts.context ? normalizePackageContext(opts.context) : undefined
 
   const id = generateSessionId()
   const dir = sessionDir(id)
@@ -490,6 +540,7 @@ export async function beginPublishSession(opts: {
     visibility: opts.visibility,
     packageId: opts.packageId,
     defaultPage: opts.defaultPage,
+    ...(context ? { context } : {}),
     createdAt: new Date().toISOString(),
     fileCount: 0,
   }
@@ -515,6 +566,7 @@ export async function uploadSessionFiles(
 export async function finalizePublishSession(
   sid: string,
   defaultPageOverride?: string,
+  contextOverride?: PackageContext,
 ): Promise<PackageMeta> {
   const session = await readSession(sid)
   const dir = sessionDir(sid)
@@ -530,6 +582,10 @@ export async function finalizePublishSession(
   const hash = await hashDir(dist)
   const sizeBytes = await dirSize(dist)
   const now = new Date().toISOString()
+  // An override given at finalize beats the one given at begin. When neither is
+  // present the update branch below leaves whatever the package already had, since
+  // the key is simply absent from the object spread over `...existing`.
+  const requestedContext = contextOverride ?? session.context
 
   if (session.mode === 'create') {
     const effectivePage = requestedPage ?? (allFiles.length === 1 ? allFiles[0] : undefined)
@@ -550,6 +606,7 @@ export async function finalizePublishSession(
       visibility: session.visibility!,
       ...(secure_token ? { secure_token, tokenGeneratedAt } : {}),
       defaultPage: effectivePage,
+      ...(requestedContext ? { context: stampContext(requestedContext, now) } : {}),
       hash,
       files: allFiles,
       sizeBytes,
@@ -579,6 +636,7 @@ export async function finalizePublishSession(
   const updated: PackageMeta = {
     ...existing,
     ...(requestedPage !== undefined ? { defaultPage: requestedPage } : {}),
+    ...(requestedContext ? { context: stampContext(requestedContext, now) } : {}),
     hash,
     files: allFiles,
     sizeBytes,
