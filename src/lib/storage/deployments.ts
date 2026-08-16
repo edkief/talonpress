@@ -315,8 +315,12 @@ export async function updatePackage(
   await copyDir(existingDist, tmpDist)
   await writeFiles(tmpDist, files)
 
-  const allFiles = await listFilesRecursive(tmpDist)
-  const hash = computeHash(allFiles.map(f => ({ path: f, content: '' })))
+  // Hash the overlaid content, not just the file names: an update that rewrites a
+  // file without adding or removing one must still move the hash. hashDir() streams
+  // the same path-then-content order as computeHash(), so a package updated here
+  // hashes identically to the same bytes published in one call or via a session.
+  const allFiles = (await listFilesRecursive(tmpDist)).map(f => f.split(path.sep).join('/'))
+  const hash = await hashDir(tmpDist)
   const sizeBytes = await dirSize(tmpDist)
 
   if (defaultPage !== undefined && !allFiles.includes(defaultPage)) {

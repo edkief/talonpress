@@ -50,13 +50,3 @@ export function getContentType(filePath: string): string {
   const ext = path.extname(filePath).slice(1).toLowerCase()
   return CONTENT_TYPES[ext] ?? 'application/octet-stream'
 }
-
-export function computeBuildHash(files: Array<{ path: string; content: string }>): string {
-  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path))
-  const hash = crypto.createHash('sha256')
-  for (const f of sorted) {
-    hash.update(f.path)
-    hash.update(f.content)
-  }
-  return hash.digest('hex')
-}
