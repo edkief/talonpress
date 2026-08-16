@@ -25,10 +25,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const returnUrl = request.nextUrl.searchParams.get('return') ?? '/'
+  const returnUrl = request.nextUrl.searchParams.get('return') ?? '/admin'
 
   // Validate return URL is same-origin to prevent open redirect
-  let safeReturn = '/'
+  let safeReturn = '/admin'
   try {
     const parsed = new URL(returnUrl)
     const base = new URL(config.publicBaseUrl)

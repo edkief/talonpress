@@ -2,15 +2,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAccess } from '@/lib/auth/access'
 import { config as appConfig } from '@/lib/config'
 
-const PUBLIC_PREFIXES = ['/auth', '/api/health', '/api/mcp', '/api/pub', '/pub', '/_next', '/favicon', '/_not-found']
+/**
+ * The management surface lives entirely under `/admin`, so the UI half of the
+ * gate is a single prefix — a new admin page is protected by virtue of where it
+ * sits, rather than by remembering to extend a list. `/api/*` is protected too,
+ * minus the endpoints that must stay reachable without an identity.
+ */
+const ADMIN_PREFIX = '/admin'
+const PUBLIC_API_PREFIXES = [
+  '/api/auth', // the login endpoint — gating it makes signing in impossible
+  '/api/health', // kubelet probes carry no identity
+  '/api/mcp', // agents authenticate via bearer token or proxy JWT in the handler
+  '/api/pub', // package metadata, authorized per-package by token
+]
+
+function matches(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(prefix + '/')
+}
 
 function isProtected(pathname: string): boolean {
   if (!appConfig.authEnabled) return false
-  if (PUBLIC_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return false
-  // The root gates itself: it renders the dashboard for admins and a public
-  // landing page for everyone else, rather than returning a bare 401/403 body.
-  if (pathname === '/') return false
-  return pathname.startsWith('/packages') || pathname.startsWith('/api/')
+  if (matches(pathname, ADMIN_PREFIX)) return true
+  if (PUBLIC_API_PREFIXES.some(p => matches(pathname, p))) return false
+  return pathname.startsWith('/api/')
+}
+
+/** A browser navigation, as opposed to an API client or an agent. */
+function wantsHtml(request: NextRequest): boolean {
+  return (request.headers.get('accept') ?? '').includes('text/html')
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
@@ -22,9 +41,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (access.isAdmin) return NextResponse.next()
 
-  // Signed in via authz-proxy but lacking the admin role: re-authenticating won't
-  // help, so say what's missing instead of bouncing them through a login loop.
+  // Signed in but lacking the admin role: re-authenticating won't help. Send
+  // browsers to the landing page, which names the role they're missing; API
+  // clients get the same information as JSON.
   if (access.authenticated) {
+    if (wantsHtml(request)) return NextResponse.redirect(new URL('/', request.url))
     return NextResponse.json(
       {
         error: 'Forbidden',
@@ -37,8 +58,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   // The shared-secret login page is the only interactive sign-in we host. Without
   // it, an unauthenticated request means the upstream authz-proxy did not forward
-  // an identity — a 401 lets the proxy handle the sign-in.
+  // an identity, so there is nowhere useful to send a browser but the landing page.
   if (!appConfig.sharedSecretEnabled) {
+    if (wantsHtml(request)) return NextResponse.redirect(new URL('/', request.url))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

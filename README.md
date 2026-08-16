@@ -115,6 +115,22 @@ TALONPRESS_DISABLE_AUTH_WARNING=true
 
 TalonPress supports two complementary mechanisms. They are OR-ed — whichever recognises the caller wins — and the app is only fully open when **neither** is configured.
 
+#### Route map
+
+The management surface lives entirely under `/admin`, so the protected set is one prefix plus the API, rather than a list to keep in sync:
+
+| Path | Access |
+| --- | --- |
+| `/admin`, `/admin/packages`, `/admin/packages/<id>` | Admin only |
+| `/api/*` | Admin only, except the four below |
+| `/` | Public landing page |
+| `/auth`, `/api/auth` | Public — the shared-secret sign-in |
+| `/api/health` | Public — liveness probes |
+| `/api/mcp` | Authenticated in the handler (see `TALONPRESS_MCP_AUTH`) |
+| `/pub/*`, `/api/pub/*` | Public, or token-gated per package |
+
+Browsers denied at `/admin` are redirected: to `/auth` when shared-secret login is available, otherwise to `/` where the landing page names the role they are missing. Non-browser clients get `401`/`403` JSON instead.
+
 #### 1. authz-proxy (`AUTHZ_PROXY_URL`) — human identity
 
 TalonPress runs *behind* [authz-proxy](https://npm.kieffer.me/-/web/detail/@authz-proxy/sdk) in reverse proxy mode. The proxy authenticates the user and forwards the request with `X-Auth-Request-*` headers, including a signed RS256 JWT in `X-Auth-Request-JWT`. [`@authz-proxy/sdk`](https://npm.kieffer.me/-/web/detail/@authz-proxy/sdk) verifies that token locally against the proxy's JWKS, giving TalonPress the user's **display name** and **external role list**. The proxy must run with `JWT_ASYMMETRIC_SIGNING=true`.
@@ -144,7 +160,7 @@ On the first visit to a private package URL with a valid `?token=` query paramet
 
 In a typical cluster deployment the two classes of traffic arrive by different routes: browsers come through the public hostname ingress (authz-proxy-protected), while MCP clients reach the pod over an internal Kubernetes Service — carrying no proxy headers and no shared secret. Because `/api/mcp` otherwise inherits the app-wide gate, enabling authz-proxy would start returning `401` to those in-cluster callers.
 
-`TALONPRESS_MCP_AUTH=none` opts the MCP transport out of the gate, and only that transport. The dashboard, `/api/packages/cleanup`, and every other route stay gated exactly as before.
+`TALONPRESS_MCP_AUTH=none` opts the MCP transport out of the gate, and only that transport. `/admin`, `/api/packages/cleanup`, and every other route stay gated exactly as before.
 
 | Value | Effect on `/api/mcp` |
 | --- | --- |

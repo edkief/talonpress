@@ -74,11 +74,11 @@ export default function Sidebar({ active }: { active?: 'dashboard' | 'packages' 
       <nav className="az-nav">
         <div className="az-nav-group">
           <div className="az-nav-label">Management</div>
-          <Link href="/" className={`az-nav-item${active === 'dashboard' ? ' is-active' : ''}`}>
+          <Link href="/admin" className={`az-nav-item${active === 'dashboard' ? ' is-active' : ''}`}>
             <IconGrid size={16} />
             Dashboard
           </Link>
-          <Link href="/packages" className={`az-nav-item${active === 'packages' ? ' is-active' : ''}`}>
+          <Link href="/admin/packages" className={`az-nav-item${active === 'packages' ? ' is-active' : ''}`}>
             <IconPackage size={16} />
             Packages
           </Link>

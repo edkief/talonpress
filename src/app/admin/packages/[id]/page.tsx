@@ -48,7 +48,7 @@ export default async function PackageDetailPage({
       <main className="az-main">
         <header className="az-topbar">
           <Link
-            href="/packages"
+            href="/admin/packages"
             style={{ color: 'var(--fg3)', fontSize: '0.875rem', marginRight: '0.5rem' }}
           >
             Packages

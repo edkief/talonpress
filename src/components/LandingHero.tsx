@@ -90,7 +90,15 @@ const STEPS = [
  * what would otherwise be a bare 401/403 body — visitors get an explanation of
  * what this host is, while the dashboard stays gated behind the same admin check.
  */
-export default function LandingHero({ authenticated, username }: { authenticated: boolean; username: string | null }) {
+export default function LandingHero({
+  authenticated,
+  username,
+  isAdmin,
+}: {
+  authenticated: boolean
+  username: string | null
+  isAdmin: boolean
+}) {
   return (
     <div className="az-hero-bg">
       <main className="az-hero">
@@ -107,7 +115,17 @@ export default function LandingHero({ authenticated, username }: { authenticated
           </p>
 
           <div className="az-hero-actions">
-            <a className="az-hero-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            {isAdmin && (
+              <Link className="az-hero-btn" href="/admin">
+                Open dashboard
+              </Link>
+            )}
+            <a
+              className={`az-hero-btn${isAdmin ? ' az-hero-btn--ghost' : ''}`}
+              href={REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <IconGithub size={16} />
               View on GitHub
             </a>
@@ -118,17 +136,19 @@ export default function LandingHero({ authenticated, username }: { authenticated
             )}
           </div>
 
-          <div className={`az-hero-note${authenticated ? ' az-hero-note--warn' : ''}`}>
-            {authenticated ? (
-              <>
-                Signed in{username ? <> as <strong>{username}</strong></> : ''}, but the{' '}
-                <code>{config.authzAdminRole}</code> role is required to manage this
-                instance. Ask an administrator to grant it.
-              </>
-            ) : (
-              <>The management dashboard on this host is restricted to administrators.</>
-            )}
-          </div>
+          {!isAdmin && (
+            <div className={`az-hero-note${authenticated ? ' az-hero-note--warn' : ''}`}>
+              {authenticated ? (
+                <>
+                  Signed in{username ? <> as <strong>{username}</strong></> : ''}, but the{' '}
+                  <code>{config.authzAdminRole}</code> role is required to manage this
+                  instance. Ask an administrator to grant it.
+                </>
+              ) : (
+                <>The management dashboard on this host is restricted to administrators.</>
+              )}
+            </div>
+          )}
         </header>
 
         <section className="az-hero-section" aria-label="Features">

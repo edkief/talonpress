@@ -68,7 +68,7 @@ export default async function PackagesPage({
                       <tr key={pkg.id}>
                         <td style={{ fontWeight: 500 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Link href={`/packages/${pkg.id}`} style={{ color: 'var(--indigo-400)' }}>
+                            <Link href={`/admin/packages/${pkg.id}`} style={{ color: 'var(--indigo-400)' }}>
                               {pkg.name}
                             </Link>
                             {pkg.disabled && (
@@ -124,7 +124,7 @@ export default async function PackagesPage({
                 <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
                   {currentPage > 1 ? (
                     <Link
-                      href={`/packages?page=${currentPage - 1}`}
+                      href={`/admin/packages?page=${currentPage - 1}`}
                       className="az-btn az-btn--ghost az-btn--sm"
                     >
                       Previous
@@ -139,7 +139,7 @@ export default async function PackagesPage({
                   </span>
                   {currentPage < totalPages ? (
                     <Link
-                      href={`/packages?page=${currentPage + 1}`}
+                      href={`/admin/packages?page=${currentPage + 1}`}
                       className="az-btn az-btn--ghost az-btn--sm"
                     >
                       Next

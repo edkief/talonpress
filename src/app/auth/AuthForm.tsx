@@ -5,7 +5,7 @@ import { useState } from 'react'
 
 export default function AuthForm() {
   const searchParams = useSearchParams()
-  const returnUrl = searchParams.get('return') ?? '/'
+  const returnUrl = searchParams.get('return') ?? '/admin'
   const [error, setError] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -23,7 +23,7 @@ export default function AuthForm() {
 
     if (res.status === 0 || (res.status >= 300 && res.status < 400)) {
       // Redirect response — follow it
-      const location = res.headers.get('location') ?? '/'
+      const location = res.headers.get('location') ?? '/admin'
       window.location.href = location
     } else {
       setError(true)

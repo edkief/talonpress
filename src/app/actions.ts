@@ -14,40 +14,40 @@ import type { Visibility } from '@/lib/storage/types'
 
 export async function disablePackageAction(id: string): Promise<void> {
   await disablePackage(id)
-  revalidatePath('/')
-  revalidatePath('/packages')
-  revalidatePath(`/packages/${id}`)
+  revalidatePath('/admin')
+  revalidatePath('/admin/packages')
+  revalidatePath(`/admin/packages/${id}`)
 }
 
 export async function enablePackageAction(id: string): Promise<void> {
   await enablePackage(id)
-  revalidatePath('/')
-  revalidatePath('/packages')
-  revalidatePath(`/packages/${id}`)
+  revalidatePath('/admin')
+  revalidatePath('/admin/packages')
+  revalidatePath(`/admin/packages/${id}`)
 }
 
 export async function setVisibilityAction(id: string, visibility: Visibility): Promise<void> {
   await updateVisibility(id, visibility)
-  revalidatePath('/')
-  revalidatePath('/packages')
-  revalidatePath(`/packages/${id}`)
+  revalidatePath('/admin')
+  revalidatePath('/admin/packages')
+  revalidatePath(`/admin/packages/${id}`)
 }
 
 export async function renewTokenAction(id: string): Promise<void> {
   await renewPackageToken(id)
-  revalidatePath('/')
-  revalidatePath('/packages')
-  revalidatePath(`/packages/${id}`)
+  revalidatePath('/admin')
+  revalidatePath('/admin/packages')
+  revalidatePath(`/admin/packages/${id}`)
 }
 
 export async function deletePackageAction(id: string): Promise<void> {
   await deletePackage(id)
-  revalidatePath('/')
-  revalidatePath('/packages')
-  redirect('/packages')
+  revalidatePath('/admin')
+  revalidatePath('/admin/packages')
+  redirect('/admin/packages')
 }
 
 export async function updateDefaultPageAction(id: string, defaultPage: string): Promise<void> {
   await updateDefaultPage(id, defaultPage.trim())
-  revalidatePath(`/packages/${id}`)
+  revalidatePath(`/admin/packages/${id}`)
 }
