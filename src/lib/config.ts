@@ -39,6 +39,16 @@ export const config = {
   // the proxy is the sole ingress and strips client-supplied copies of those headers.
   authzRoleSource: env('AUTHZ_ROLE_SOURCE', 'jwt') === 'header' ? 'header' as const : 'jwt' as const,
 
+  // OpenTalon embed channel. TalonPress proxies the browser's chat to OpenTalon's
+  // /api/embed routes with this secret and asserts who the user is; OpenTalon is
+  // never browser-facing, so the secret must never leave the server.
+  agentBaseUrl: env('TALONPRESS_AGENT_URL').replace(/\/$/, ''),
+  agentSecret: env('TALONPRESS_AGENT_SECRET'),
+  agentTimeoutMs: envInt('TALONPRESS_AGENT_TIMEOUT_MS', 15000),
+  // Budget for the rendered page-context block. Content past it is truncated with a
+  // pointer rather than dropped silently.
+  agentMaxContextChars: envInt('TALONPRESS_AGENT_MAX_CONTEXT_CHARS', 4000),
+
   // 'inherit' (default) gates /api/mcp with whatever auth is configured.
   // 'none' opts the MCP transport out entirely, for clusters where MCP clients
   // reach the pod over an internal Service that never passes through the proxy.
@@ -60,6 +70,17 @@ export const config = {
   /** Whether /api/mcp enforces auth. Independent of the dashboard gate. */
   get mcpAuthEnabled(): boolean {
     return this.mcpAuthMode !== 'none' && this.authEnabled
+  },
+  /**
+   * Whether the embedded agent chat is available.
+   *
+   * `authEnabled` is required here rather than at each call site: with no auth
+   * configured `getAccess()` reports every anonymous caller as an admin, so an
+   * unconfigured deployment would otherwise hand the agent to anyone who could
+   * reach it. Gating in one place means the chat fails closed by construction.
+   */
+  get agentEnabled(): boolean {
+    return this.agentBaseUrl.length > 0 && this.agentSecret.length > 0 && this.authEnabled
   },
 }
 

@@ -109,6 +109,12 @@ TALONPRESS_MCP_AUTH=inherit              # 'inherit' | 'none' (opt /api/mcp out 
 
 # Suppress the startup warning when no auth mechanism is configured
 TALONPRESS_DISABLE_AUTH_WARNING=true
+
+# OpenTalon agent chat — see "Agent Chat" below. Requires auth to be configured.
+TALONPRESS_AGENT_URL=https://opentalon.example.com
+TALONPRESS_AGENT_SECRET=your_embed_channel_secret
+TALONPRESS_AGENT_TIMEOUT_MS=15000          # Non-streaming calls only
+TALONPRESS_AGENT_MAX_CONTEXT_CHARS=4000    # Budget for the page-context block
 ```
 
 ### Authentication Behaviour
@@ -128,6 +134,7 @@ The management surface lives entirely under `/admin`, so the protected set is on
 | `/api/health` | Public — liveness probes |
 | `/api/mcp` | Authenticated in the handler (see `TALONPRESS_MCP_AUTH`) |
 | `/pub/*`, `/api/pub/*` | Public, or token-gated per package |
+| `/api/pub/*/agent/*` | Admin only — enforced in the handler, not the proxy |
 
 Browsers denied at `/admin` are redirected: to `/auth` when shared-secret login is available, otherwise to `/` where the landing page names the role they are missing. Non-browser clients get `401`/`403` JSON instead.
 

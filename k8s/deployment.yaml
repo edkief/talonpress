@@ -26,6 +26,16 @@ spec:
               value: production
             - name: STORAGE_DIR_PATH
               value: /app/.storage
+            # Agent chat. Both are optional — leave the Secret out entirely and the
+            # chat stays off. `optional: true` keeps the pod schedulable without it.
+            - name: TALONPRESS_AGENT_URL
+              value: http://opentalon.opentalon.svc.cluster.local:3000
+            - name: TALONPRESS_AGENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talonpress-agent
+                  key: secret
+                  optional: true
           volumeMounts:
             - name: storage
               mountPath: /app/.storage
