@@ -83,6 +83,10 @@ Other notes:
 
 - Omit `package_id` to create; provide it to update (overwrites matching paths).
 - `default_page` (e.g. `index.html`) must be among the selected files — served at the package root.
+- `context` (optional) describes the package for the agent chat TalonPress can embed in the
+  served pages — a `summary`, an `outline`, `facts` and an `excerpt`. It is what the agent knows
+  when a reader asks about the page they are on. Set or correct it later with the
+  `set_package_context` MCP tool; that needs no republish.
 - Text and binary files are detected and encoded automatically.
 - Large publishes stream via an upload session in chunks (~15 MB content each), keeping peak memory to roughly one chunk.
 - Skipped directories: `.git`, `node_modules`, `.next`, `dist`, `build`.

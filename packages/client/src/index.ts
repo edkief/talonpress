@@ -242,6 +242,21 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
             'Entry-point file served at the package root (e.g. index.html). ' +
               'Specify the filename that should be served when the package root URL is requested.',
           ),
+        context: z
+          .object({
+            summary: z.string().optional().describe('What this package is and who it is for.'),
+            outline: z.array(z.string()).optional().describe('Section or page headings.'),
+            facts: z
+              .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+              .optional()
+              .describe('Short key/value facts an agent should be able to quote.'),
+            excerpt: z.string().optional().describe('A representative passage.'),
+          })
+          .optional()
+          .describe(
+            'What an agent should know about this package when a reader chats about it from the ' +
+              'page itself. Optional; set or correct it later with set_package_context without republishing.',
+          ),
       }),
       execute: async (input) => {
         try {
@@ -307,6 +322,9 @@ export function getTalonpressTools(cfg: TalonpressConfig, workspaceDir?: string)
               ? { package_id: input.package_id }
               : { name: input.name, visibility: input.visibility ?? 'public' }),
             default_page: input.default_page,
+            // Sent at begin rather than finalize so a malformed context fails before
+            // the whole package has been streamed up.
+            ...(input.context ? { context: input.context } : {}),
           });
           const sessionId = parseField(begin, 'session_id');
           if (!sessionId) return `Error: failed to start publish session: ${begin}`;
