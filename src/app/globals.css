@@ -260,6 +260,14 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-weight: 600;
   flex: 1;
 }
+.az-package-search {
+  width: 100%;
+  max-width: 34rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.az-package-search .az-input { min-width: 0; }
 
 /* ─── Table ─────────────────────────────────────────────────────────── */
 .az-table-wrap { overflow-x: auto; }
@@ -575,6 +583,8 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   .az-hero-title { font-size: 2rem; }
   .az-hero-tagline { font-size: 1rem; }
   .az-hero-cards { grid-template-columns: 1fr; }
+  .az-package-search { max-width: none; flex-wrap: wrap; }
+  .az-package-search .az-input { flex-basis: 100%; }
 }
 
 .az-auth-bg {

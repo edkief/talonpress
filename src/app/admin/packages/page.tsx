@@ -5,6 +5,7 @@ import { VisibilityToggle } from '@/components/VisibilityToggle'
 import { listPackages } from '@/lib/storage/deployments'
 import { packageAccessUrl } from '@/lib/storage/urls'
 import { formatBytes } from '@/lib/format'
+import { filterPackagesByName } from '@/lib/packages/search'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -20,19 +21,27 @@ const PAGE_SIZE = 20
 export default async function PackagesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; q?: string }>
 }) {
   const packages = await listPackages()
 
-  const { page: pageParam } = await searchParams
-  const total = packages.length
+  const { page: pageParam, q: queryParam } = await searchParams
+  const query = queryParam?.trim() ?? ''
+  const filteredPackages = filterPackagesByName(packages, query)
+  const total = filteredPackages.length
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const requestedPage = Number.parseInt(pageParam ?? '1', 10)
   const currentPage = Number.isNaN(requestedPage)
     ? 1
     : Math.min(Math.max(requestedPage, 1), totalPages)
   const start = (currentPage - 1) * PAGE_SIZE
-  const pageItems = packages.slice(start, start + PAGE_SIZE)
+  const pageItems = filteredPackages.slice(start, start + PAGE_SIZE)
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    params.set('page', String(page))
+    return `/admin/packages?${params.toString()}`
+  }
 
   return (
     <div className="az-shell">
@@ -41,14 +50,36 @@ export default async function PackagesPage({
         <header className="az-topbar">
           <h1 className="az-topbar-title">Packages</h1>
           <span style={{ fontSize: '0.8125rem', color: 'var(--fg3)' }}>
-            {total} total
+            {query ? `${total} of ${packages.length}` : `${total} total`}
           </span>
         </header>
         <div className="az-content">
           <div className="az-panel">
+            <div className="az-panel-header">
+              <form className="az-package-search" method="get" role="search">
+                <input
+                  className="az-input"
+                  type="search"
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Search package names…"
+                  aria-label="Search package names"
+                />
+                <button className="az-btn az-btn--primary az-btn--sm" type="submit">
+                  Search
+                </button>
+                {query && (
+                  <Link className="az-btn az-btn--ghost az-btn--sm" href="/admin/packages">
+                    Clear
+                  </Link>
+                )}
+              </form>
+            </div>
             <div className="az-table-wrap">
-              {packages.length === 0 ? (
-                <div className="az-empty">No packages found.</div>
+              {filteredPackages.length === 0 ? (
+                <div className="az-empty">
+                  {query ? `No packages match “${query}”.` : 'No packages found.'}
+                </div>
               ) : (
                 <table className="az-table">
                   <thead>
@@ -124,7 +155,7 @@ export default async function PackagesPage({
                 <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
                   {currentPage > 1 ? (
                     <Link
-                      href={`/admin/packages?page=${currentPage - 1}`}
+                      href={pageHref(currentPage - 1)}
                       className="az-btn az-btn--ghost az-btn--sm"
                     >
                       Previous
@@ -139,7 +170,7 @@ export default async function PackagesPage({
                   </span>
                   {currentPage < totalPages ? (
                     <Link
-                      href={`/admin/packages?page=${currentPage + 1}`}
+                      href={pageHref(currentPage + 1)}
                       className="az-btn az-btn--ghost az-btn--sm"
                     >
                       Next
