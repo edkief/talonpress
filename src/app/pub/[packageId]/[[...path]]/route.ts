@@ -9,6 +9,7 @@ import { getAccess } from '@/lib/auth/access'
 import { config } from '@/lib/config'
 import { renderMarkdown } from '@/lib/markdown'
 import { injectBubble, type InjectBubbleOptions } from '@/lib/pubBubble/inject'
+import { injectTitleMetadata } from '@/lib/html/titleMetadata'
 
 export async function GET(
   request: NextRequest,
@@ -62,6 +63,11 @@ export async function GET(
   // Offering the chat to a token holder would only produce a panel that 401s.
   const canChat = config.agentEnabled && hasValidSession
 
+  // Public package names are safe to expose to link-preview crawlers. Private
+  // names are only added when this exact request proves knowledge of the token;
+  // an admin or package-session cookie alone must not make a tokenless URL unfurl.
+  const includeTitleMetadata = meta.visibility === 'public' || hasValidToken
+
   const defaultPage = meta.defaultPage ?? 'index.html'
 
   // Redirect bare package root to trailing-slash so relative asset URLs resolve correctly.
@@ -69,7 +75,7 @@ export async function GET(
   // never trigger for this case — handle it explicitly before path resolution.
   const url = new URL(request.url)
   if (pathSegments.length === 0 && !url.pathname.endsWith('/')) {
-    const redirect = NextResponse.redirect(new URL(url.pathname + '/', config.publicBaseUrl))
+    const redirect = NextResponse.redirect(new URL(url.pathname + '/' + url.search, config.publicBaseUrl))
     if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
     return redirect
   }
@@ -89,7 +95,7 @@ export async function GET(
     if (indexPath) {
       try {
         stat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, stat, canToggle, canChat, meta.name), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, stat, canToggle, canChat, meta.name, includeTitleMetadata), pkgSessionCookie)
       } catch {
         // fall through
       }
@@ -101,7 +107,7 @@ export async function GET(
     // Redirect to trailing-slash URL so relative asset paths (img src, scripts) resolve correctly
     const url = new URL(request.url)
     if (!url.pathname.endsWith('/')) {
-      const redirect = NextResponse.redirect(new URL(url.pathname + '/', config.publicBaseUrl))
+      const redirect = NextResponse.redirect(new URL(url.pathname + '/' + url.search, config.publicBaseUrl))
       if (pkgSessionCookie) redirect.headers.set('Set-Cookie', pkgSessionCookie)
       return redirect
     }
@@ -110,14 +116,14 @@ export async function GET(
     if (indexPath) {
       try {
         const idxStat = await fs.promises.stat(indexPath)
-        return withCookie(await serveFile(request, packageId, indexPath, idxStat, canToggle, canChat, meta.name), pkgSessionCookie)
+        return withCookie(await serveFile(request, packageId, indexPath, idxStat, canToggle, canChat, meta.name, includeTitleMetadata), pkgSessionCookie)
       } catch {
         return new NextResponse('Not Found', { status: 404 })
       }
     }
   }
 
-  return withCookie(await serveFile(request, packageId, safePath, stat, canToggle, canChat, meta.name), pkgSessionCookie)
+  return withCookie(await serveFile(request, packageId, safePath, stat, canToggle, canChat, meta.name, includeTitleMetadata), pkgSessionCookie)
 }
 
 function withCookie(response: NextResponse, cookie: string | undefined): NextResponse {
@@ -133,6 +139,7 @@ async function serveFile(
   canToggle: boolean,
   canChat: boolean,
   packageName: string,
+  includeTitleMetadata: boolean,
 ): Promise<NextResponse> {
   const ext = path.extname(filePath).slice(1).toLowerCase()
 
@@ -150,9 +157,10 @@ async function serveFile(
     }
     const title = path.basename(filePath, '.md')
     const rendered = renderMarkdown(source, title)
-    const body = canToggle || canChat
+    let body = canToggle || canChat
       ? injectBubble(rendered, bubbleOptions(packageId, filePath, title, canChat))
       : rendered
+    if (includeTitleMetadata) body = injectTitleMetadata(body, packageName)
     return new NextResponse(body, {
       status: 200,
       headers: {
@@ -164,9 +172,10 @@ async function serveFile(
 
   if (ext === 'html' || ext === 'htm') {
     const source = await fs.promises.readFile(filePath, 'utf8')
-    const body = canToggle || canChat
+    let body = canToggle || canChat
       ? injectBubble(source, bubbleOptions(packageId, filePath, packageName, canChat))
       : source
+    if (includeTitleMetadata) body = injectTitleMetadata(body, packageName)
     return new NextResponse(body, {
       status: 200,
       headers: {
